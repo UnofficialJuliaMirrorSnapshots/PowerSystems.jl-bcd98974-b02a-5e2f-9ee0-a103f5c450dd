@@ -54,159 +54,6 @@ Returns:
     return DATA
 end
 
-#=
-"""
-Args:
-    PowerSystems Dictionary
-    Dictionary of all the data files
-Returns:
-    Returns an dictionary with Device name as key and PowerSystems Forecasts
-    dictionary as values
-"""
-
-function assign_ts_data(ps_dict::Dict{String,Any},ts_dict::Dict{String,Any})
-    if haskey(ts_dict,"load")
-        ps_dict["load"] =  PowerSystems.add_time_series_load(ps_dict,ts_dict["load"])
-    else
-        @warn "Not assigning time series to loads"
-    end
-
-    if haskey(ts_dict,"gen")
-        ts_map = _retrieve(ts_dict["gen"], Union{TimeSeries.TimeArray,DataFrames.DataFrame})
-        for (key,val) in ts_map
-            ts = _access(ts_dict["gen"],vcat(val,key))
-            dd_map = _retrieve(ps_dict["gen"],key)
-            if length(dd_map) > 0 
-                dd_map = string.(unique(values(dd_map))[1]) 
-            else
-                @warn("no $key entries in psdict")
-                continue
-            end
-            dd = _access(ps_dict["gen"],vcat(dd_map,key))
-            dd = PowerSystems.add_time_series(dd,ts)
-        end
-    else
-        @warn "Not assigning time series to gens"
-    end
-
-    return ps_dict
-end
-
-function make_device_forecast(device::D, df::DataFrames.DataFrame, resolution::Dates.Period,horizon::Int) where {D<:Device}
-    time_delta = Dates.Minute(df[2,:DateTime]-df[1,:DateTime])
-    initialtime = df[1,:DateTime] # TODO :read the correct date/time when that was issued  forecast
-    last_date = df[end,:DateTime]
-    ts_dict = Dict{Any,Dict{Int,TimeSeries.TimeArray}}()
-    ts_raw =  TimeSeries.TimeArray(df[1],df[2])
-    for ts in initialtime:resolution:last_date
-        ts_dict[ts] = Dict{Int,TimeSeries.TimeArray}(1 => ts_raw[ts:time_delta:(ts+resolution)])
-    end
-    forecast = Dict{String,Any}("horizon" =>horizon,
-                                            "resolution" => resolution, #TODO : fix type conversion to JSON
-                                            "interval" => time_delta,   #TODO : fix type conversion to JSON
-                                            "initialtime" => initialtime,
-                                            "device" => device,
-                                            "data" => ts_dict
-                                            )
-    return forecast
-end
-
-
- # -Parse csv file to dict
-"""
-Args:
-    Dictionary of all the data files
-    Length of the forecast - Week()/Dates.Day()/Dates.Hour()
-    Forecast horizon in hours - Int64
-    Array of PowerSystems devices in the systems - Renewable Generators and
-    Loads
-Returns:
-    Returns an dictionary with Device name as key and PowerSystems Forecasts
-    dictionary as values
-"""
-function make_forecast_dict(time_series::Dict{String,Any},
-                            resolution::Dates.Period, horizon::Int,
-                            Devices::Array{Generator,1})
-    forecast = Dict{String,Any}()
-    for device in Devices
-        for (key_df,df) in time_series
-            if device.name in map(String, names(df))
-                for name in map(String, names(df))
-                    if name == device.name
-                        forecast[device.name] = make_device_forecast(device, df[[:DateTime, Symbol(device.name)]], resolution, horizon)
-                    end
-                end
-            end
-        end
-        if !haskey(forecast,device.name)
-            @info "No forecast found for $(device.name) "
-        end
-    end
-    return forecast
-end
-
-"""
-Args:
-    Dictionary of all the data files
-    Length of the forecast - Week()/Dates.Day()/Dates.Hour()
-    Forecast horizon in hours - Int64
-    Array of PowerSystems devices in the systems- Loads
-Returns:
-    Returns an dictionary with Device name as key and PowerSystems Forecasts
-    dictionary as values
-"""
-function make_forecast_dict(time_series::Dict{String,Any},
-                            resolution::Dates.Period, horizon::Int,
-                            Devices::Array{ElectricLoad,1})
-    forecast = Dict{String,Any}()
-    for device in Devices
-        if haskey(time_series,"load")
-            if device.bus.name in  map(String, names(time_series["load"]))
-                df = time_series["load"][[:DateTime,Symbol(device.bus.name)]]
-                forecast[device.name] = make_device_forecast(device, df, resolution, horizon)
-            end
-        else
-            @warn "No forecast found for Loads"
-        end
-    end
-    return forecast
-end
-
-
-"""
-Args:
-    Dictionary of all the data files
-    Length of the forecast - Week()/Dates.Day()/Dates.Hour()
-    Forecast horizon in hours - Int64
-    Array of PowerSystems devices in the systems- Loads
-    Array of PowerSystems LoadZones
-
-Returns:
-    Returns an dictionary with Device name as key and PowerSystems Forecasts
-    dictionary as values
-"""
-function make_forecast_dict(time_series::Dict{String,Any},
-                            resolution::Dates.Period, horizon::Int,
-                            Devices::Array{ElectricLoad,1},
-                            LoadZones::Array{Device,1})
-    forecast = Dict{String,Any}()
-    for device in Devices
-        if haskey(time_series,"load")
-            for lz in LoadZones
-                if device.bus in lz.buses
-                    df = time_series["load"][[:DateTime,Symbol(lz.name)]]
-                    forecast[device.name] = make_device_forecast(device, df, resolution, horizon)
-                end
-            end
-        else
-            @warn "No forecast found for Loads"
-        end
-    end
-    return forecast
-end
-=#
-
-# - Parse Dict to Forecast Struct
 
 """
 Args:
@@ -221,8 +68,8 @@ function make_forecast_array(sys::Union{System,Array{Component,1}},ts_dict::Dict
     fc = Array{Forecast}(undef, 0)
     for (key,val) in ts_map
         ts = _access(ts_dict,vcat(val,key)) #retrieve timeseries data
-        if (typeof(ts)==DataFrames.DataFrame) & (length(ts) > 2)
-            devices = reduce(vcat,[_get_device(c,sys) for c in string.(names(ts))]) #retrieve devices from system that are in the timeseries data
+        if (typeof(ts)==DataFrames.DataFrame) & (size(ts,2) > 2)
+            devices = reduce(vcat,[_get_device(c,sys) for c in string.(names(ts)) if c != "DateTime"]) #retrieve devices from system that are in the timeseries data
             for d in devices
                 push!(fc,Deterministic(d,"scalingfactor",TimeSeries.TimeArray(ts.DateTime,ts[Symbol(d.name)]))) # TODO: unhardcode scalingfactor
             end
@@ -247,21 +94,47 @@ function make_forecast_array(sys::Union{System,Array{Component,1}},ts_dict::Dict
     return fc
  end
 
-
-# - Assign Forecast to System Struct
-
-"""
+ """
 Args:
-    A System struct
-    A :Symbol=>Array{ <: Forecast,1} Pair denoting the forecast name and array of device forecasts
+    A ConcreteSystem struct
+    A dictonary of forecasts
 Returns:
-    A System struct with a modeified forecasts field
+    A PowerSystems forecast stuct array
 """
-function pushforecast!(sys::System,fc::Pair{Symbol,Array{Forecast,1}})
-    sys.forecasts[fc.first] = fc.second
-end
 
-# Write dict to Json
+function make_forecast_array(sys::ConcreteSystem,ts_dict::Dict)
+    ts_map = _retrieve(ts_dict, Union{TimeSeries.TimeArray,DataFrames.DataFrame},Dict(),[]) #find key-path to timeseries data fields
+    fc = Array{Forecast}(undef, 0)
+    all_devices = collect(get_components(Device,sys))
+    for (key,val) in ts_map
+        ts = _access(ts_dict,vcat(val,key)) #retrieve timeseries data
+        if (typeof(ts)==DataFrames.DataFrame) & (size(ts,2) > 2)
+            devices = [d for d in all_devices if d.name in string.(names(ts))]
+            for d in devices
+                push!(fc,Deterministic(d,"scalingfactor",TimeSeries.TimeArray(ts.DateTime,ts[Symbol(d.name)]))) # TODO: unhardcode scalingfactor
+            end
+        else
+            devices = [d for d in all_devices if d.name == key]
+
+            cn = isa(ts,DataFrames.DataFrame) ? names(ts) : TimeSeries.colnames(ts)
+            cn = [c for c in cn if c != :DateTime]
+        
+            if length(devices) > 0 
+                for d in devices
+                    for c in cn #if a TimeArray has multiple value columns, create mulitiple forecasts for different parameters in the same device
+                        timeseries = isa(ts,DataFrames.DataFrame) ? TimeSeries.TimeArray(ts.DateTime,ts[c]) : ts[c]
+                        push!(fc,Deterministic(d,string(c),timeseries))
+                    end
+                end
+            else
+                @warn("no $key entries for devices in sys")
+            end
+        end
+    end
+    return fc
+ end
+
+ # Write dict to Json
 
 function write_to_json(filename,Forecasts_dict)
     for (type_key,type_fc) in Forecasts_dict
@@ -273,7 +146,6 @@ function write_to_json(filename,Forecasts_dict)
         end
     end
 end
-
 
 #=
 # Parse json to dict

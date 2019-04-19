@@ -13,39 +13,36 @@ end
 
     rts_da = PowerSystems.make_forecast_array(sys_rts, cdm_dict["forecasts"]["DA"])
     @test length(rts_da[1].data) == 24
-    @test length(rts_da) == 138
+    @test length(rts_da) == 141
 
     rts_rt = PowerSystems.make_forecast_array(sys_rts, cdm_dict["forecasts"]["RT"])
     @test length(rts_rt[1].data) == 288
-    @test length(rts_rt) == 131
+    @test length(rts_rt) == 134
 
-    PowerSystems.pushforecast!(sys_rts,:DA=>rts_da)
-    PowerSystems.pushforecast!(sys_rts,:RT=>rts_rt)
+    PowerSystems.add_forecast!(sys_rts,:DA=>rts_da)
+    PowerSystems.add_forecast!(sys_rts,:RT=>rts_rt)
     @test length(sys_rts.forecasts) == 2
 
-    @info "making RT System"
-    sys_rts_rt = System(cdm_dict)
-    @test sys_rts_rt isa System
+    cs_rts = ConcreteSystem(System(cdm_dict))
+    @test cs_rts isa ConcreteSystem
 
-    # Verify functionality of the concrete version of System.
-    # TODO: Refactor once the ConcreteSystem implementation is finalized.
-    sys = ConcreteSystem(sys_rts)
-    @test length(sys_rts_rt.branches) == length(collect(get_mixed_components(Branch, sys)))
-    @test length(sys_rts_rt.loads) == length(collect(get_mixed_components(ElectricLoad, sys)))
-    @test length(sys_rts_rt.storage) == length(collect(get_mixed_components(Storage, sys)))
-    @test length(sys_rts_rt.generators.thermal) == length(collect(get_mixed_components(ThermalGen, sys)))
-    @test length(sys_rts_rt.generators.renewable) == length(collect(get_mixed_components(RenewableGen, sys)))
-    @test length(sys_rts_rt.generators.hydro) == length(collect(get_mixed_components(HydroGen, sys)))
-    @test length(get_components(Bus, sys)) > 0
-    @test length(get_components(ThermalDispatch, sys)) > 0
-    for x in (true, false)
-        show_component_counts(sys, devnull; show_hierarchy=x)
-    end
+    rts_da_cs = PowerSystems.make_forecast_array(cs_rts, cdm_dict["forecasts"]["DA"])
+    @test length(rts_da[1].data) == 24
+    @test length(rts_da) == 141
+
+    rts_rt_cs = PowerSystems.make_forecast_array(cs_rts, cdm_dict["forecasts"]["RT"])
+    @test length(rts_rt[1].data) == 288
+    @test length(rts_rt) == 134
+
+    PowerSystems.add_forecast!(cs_rts,:DA=>rts_da)
+    PowerSystems.add_forecast!(cs_rts,:RT=>rts_rt)
+    @test length(cs_rts.forecasts) == 2
+    
 end
 
 @testset "CDM parsing invalid directory" begin
-    baddir = joinpath(RTS_GMLC_DIR, "../../test")
-    @test_throws SystemError PowerSystems.csv2ps_dict(baddir, 100.0)
+    baddir = abspath(joinpath(RTS_GMLC_DIR, "../../test"))
+    @test_throws ErrorException PowerSystems.csv2ps_dict(baddir, 100.0)
 end
 
 @testset "consistency between CDM and standardfiles" begin
