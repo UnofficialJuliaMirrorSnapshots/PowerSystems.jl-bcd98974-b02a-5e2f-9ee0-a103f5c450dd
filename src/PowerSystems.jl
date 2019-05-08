@@ -15,6 +15,7 @@ export LoadZones
 
 export PowerSystemType
 export Component
+export ComponentIterator
 export Device
 export Branch
 export Injection

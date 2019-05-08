@@ -178,9 +178,9 @@ function ConcreteSystem(sys::System)
         end
     end
 
-    loadZones = get(sys.annex, :LoadZones, nothing)
-    if !isnothing(loadZones)
-        for lz in loadZones
+    load_zones = isnothing(sys.annex) ? nothing : get(sys.annex, :LoadZones, nothing)
+    if !isnothing(load_zones)
+        for lz in load_zones
             add_component!(concrete_sys, lz)
         end
     end
@@ -221,8 +221,14 @@ end
 # need each PowerSystemType to store a UUID.
 # GitHub issue #203
 
+# Const Definitions
 
-"""Returns an iterable of components from the System. T can be concrete or abstract.
+
+"""Defines the Iterator to contain variables of type Component.
+"""
+const ComponentIterator{T} = Base.Iterators.Flatten{Vector{Vector{T}}} where {T <: Component}
+
+"""Returns a ComponentIterator{T} from the System. T can be concrete or abstract.
 
 # Examples
 ```julia
@@ -230,17 +236,17 @@ devices = PowerSystems.get_components(ThermalDispatch, system)
 generators = PowerSystems.get_components(Generator, system)
 ```
 """
-function get_components(::Type{T}, sys::ConcreteSystem) where {T <: Component}
+function get_components(::Type{T}, sys::ConcreteSystem)::ComponentIterator{T} where {T <: Component}
     if isconcretetype(T)
         components = get(sys.components, T, nothing)
         if isnothing(components)
-            return Iterators.take([], 0)
+            return ComponentIterator{T}(Vector{T}())
         else
-            return Iterators.take(components, length(components))
+            return ComponentIterator{T}([components])
         end
     else
         types = [x for x in get_all_concrete_subtypes(T) if haskey(sys.components, x)]
-        return Iterators.flatten(sys.components[x] for x in types)
+        return ComponentIterator{T}([sys.components[x] for x in types])
     end
 end
 
@@ -261,6 +267,6 @@ function Base.summary(io::IO, sys::ConcreteSystem)
 
     sort!(rows, by = x -> x.ConcreteType)
 
-    df = DataFrames.DataFrame(rows)
-    print(io, df)
+    #df = DataFrames.DataFrame(rows)
+    print(io, "This is currently broken")
 end
