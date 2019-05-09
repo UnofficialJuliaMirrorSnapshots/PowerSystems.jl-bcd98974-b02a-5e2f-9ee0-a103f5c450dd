@@ -220,29 +220,38 @@ The polynomial term follows the convention that for an n-degree polynomial, at l
     c_o is stored in the fixed_cost field in of the Econ Struct
 """
 function make_thermal_gen(gen_name, d, bus)
-    model = GeneratorCostModel(d["model"])
-    if model == PIECEWISE_LINEAR::GeneratorCostModel
-        cost_component = d["cost"]
-        power_p = [i for (ix,i) in enumerate(cost_component) if isodd(ix)]
-        cost_p =  [i for (ix,i) in enumerate(cost_component) if iseven(ix)] #./power_p : removing this to make cost values in $/hr
-        cost = [(p,c) for (p,c) in zip(cost_p,power_p)]
-        fixedcost = cost[1][2]
-    elseif model == POLYNOMIAL::GeneratorCostModel
-        if d["ncost"] == 0
-            cost = (0.0, 0.0)
-            fixedcost = 0.0
-        elseif d["ncost"] == 1
-            cost = (0.0, 0.0)
-            fixedcost = d["cost"][1]
-        elseif d["ncost"] == 2
-            cost = (0.0, d["cost"][1])
-            fixedcost = d["cost"][2]
-        elseif d["ncost"] == 3
-            cost = (d["cost"][1], d["cost"][2]) 
-            fixedcost = d["cost"][3]
-        else
-            throw(DataFormatError("invalid value for ncost: $(d["ncost"]). PowerSystems only supports polynomials up to second degree"))
+    if haskey(d,"model")
+        model = GeneratorCostModel(d["model"])
+        if model == PIECEWISE_LINEAR::GeneratorCostModel
+            cost_component = d["cost"]		        
+            power_p = [i for (ix,i) in enumerate(cost_component) if isodd(ix)]		        
+            cost_p =  [i for (ix,i) in enumerate(cost_component) if iseven(ix)] 
+            cost = [(p,c) for (p,c) in zip(cost_p,power_p)]		     
+            fixedcost = cost[1][2]
+        elseif model == POLYNOMIAL::GeneratorCostModel
+            if d["ncost"] == 0		         
+                cost = (0.0, 0.0)		           
+                fixedcost = 0.0		                
+            elseif d["ncost"] == 1		            
+                cost = (0.0, 0.0)		                 
+                fixedcost = d["cost"][1]		            
+            elseif d["ncost"] == 2		                 
+                cost = (0.0, d["cost"][1])		            
+                fixedcost = d["cost"][2]		                
+            elseif d["ncost"] == 3		            
+                cost = (d["cost"][1], d["cost"][2]) 		                 
+                fixedcost = d["cost"][3]		             
+            else		                
+                throw(DataFormatError("invalid value for ncost: $(d["ncost"]). PowerSystems only supports polynomials up to second degree"))
+            end
         end
+    else
+        @warn "Generator cost data not included for Generator: $gen_name"
+        tmpcost = EconThermal()
+        cost = tmpcost.variablecost
+        fixedcost = tmpcost.fixedcost
+        startupcost = tmpcost.startupcost
+        shutdncost = tmpcost.shutdncost
     end
 
     # TODO GitHub #148: ramp_agc isn't always present. This value may not be correct.
