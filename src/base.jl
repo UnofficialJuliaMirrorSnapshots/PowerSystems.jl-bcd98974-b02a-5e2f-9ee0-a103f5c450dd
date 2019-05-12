@@ -1,40 +1,15 @@
 ### Struct and different Power System constructors depending on the data provided ####
 
 """
-    System
+    _System
 
-A power system defined by fields for buses, generators, loads, branches, and
-overall system parameters.
+An internal struct that collects system components.
 
-# Constructor
-```julia
-System(buses, generators, loads, branches, storage, basepower; kwargs...)
-System(buses, generators, loads, branches, basepower; kwargs...)
-System(buses, generators, loads, basepower; kwargs...)
-System(ps_dict; kwargs...)
-System(file, ts_folder; kwargs...)
-System(; kwargs...)
-```
-
-# Arguments
-
-* `buses`::Vector{Bus} : an array of buses
-* `generators`::Vector{Generator} : an array of generators of (possibly) different types
-* `loads`::Vector{ElectricLoad} : an array of load specifications that includes timing of the loads
-* `branches`::Union{Nothing, Vector{Branch}} : an array of branches; may be `nothing`
-* `storage`::Union{Nothing, Vector{Storage}} : an array of storage devices; may be `nothing`
-* `basepower`::Float64 : the base power of the system (DOCTODO: is this true? what are the units of base power?)
-* `ps_dict`::Dict{String,Any} : the dictionary object containing System data
-* `file`::String, `ts_folder`::String : the filename and foldername that contain the System data
-
-# Keyword arguments
-
-* `runchecks`::Bool : run available checks on input fields
-DOCTODO: any other keyword arguments? genmap_file, REGEX_FILE
+# Constructors are identical to `System`
 
 """
-struct System <: PowerSystemType
-    # DOCTODO docs for System fields are currently not working, JJS 1/15/19
+struct _System <: PowerSystemType
+    # DOCTODO docs for _System fields are currently not working, JJS 1/15/19
     buses::Vector{Bus}
     generators::GenClasses
     loads::Vector{<:ElectricLoad}
@@ -45,7 +20,7 @@ struct System <: PowerSystemType
     services::Union{Nothing, Vector{ <: Service}}
     annex::Union{Nothing,Dict{Any,Any}}
 #=
-    function System(buses, generators, loads, branches, storage, basepower,
+    function _System(buses, generators, loads, branches, storage, basepower,
                     forecasts, services, annex; kwargs...)
 
         sys = new(buses, generators, loads, branches, storage, basepower,
@@ -60,8 +35,8 @@ struct System <: PowerSystemType
     end=#
 end
 
-"""Primary System constructor. Funnel point for all other outer constructors."""
-function System(buses::Vector{Bus},
+"""Primary _System constructor. Funnel point for all other outer constructors."""
+function _System(buses::Vector{Bus},
                 generators::Vector{<:Generator},
                 loads::Vector{<:ElectricLoad},
                 branches::Union{Nothing, Vector{<:Branch}},
@@ -90,11 +65,11 @@ function System(buses::Vector{Bus},
         timeseriescheckforecast(forecasts)
     end
 
-    return System(buses, gen_classes, loads, branches, storage, basepower, forecasts, services, annex)
+    return _System(buses, gen_classes, loads, branches, storage, basepower, forecasts, services, annex)
 end
 
-"""Constructs System with default values."""
-function System(; buses=[Bus()],
+"""Constructs _System with default values."""
+function _System(; buses=[Bus()],
                 generators=[ThermalDispatch(), RenewableFix()],
                 loads=[PowerLoad()],
                 branches=nothing,
@@ -104,55 +79,88 @@ function System(; buses=[Bus()],
                 services = nothing,
                 annex = nothing,
                 kwargs...)
-    return System(buses, generators, loads, branches, storage, basepower, forecasts, services, annex; kwargs...)
+    return _System(buses, generators, loads, branches, storage, basepower, forecasts, services, annex; kwargs...)
 end
 
-"""Constructs System from a ps_dict."""
-function System(ps_dict::Dict{String,Any}; kwargs...)
+"""Constructs _System from a ps_dict."""
+function _System(ps_dict::Dict{String,Any}; kwargs...)
     buses, generators, storage, branches, loads, loadZones, shunts, forecasts, services =
         ps_dict2ps_struct(ps_dict)
 
-    return System(buses, generators, loads, branches, storage, ps_dict["baseMVA"],
+    return _System(buses, generators, loads, branches, storage, ps_dict["baseMVA"],
                   forecasts, services, Dict(:LoadZones=>loadZones);
                   kwargs...);
 end
 
-"""Constructs System from a file containing Matpower, PTI, or JSON data."""
-function System(file::String, ts_folder::String; kwargs...)
+"""Constructs _System from a file containing Matpower, PTI, or JSON data."""
+function _System(file::String, ts_folder::String; kwargs...)
     ps_dict = parsestandardfiles(file,ts_folder; kwargs...)
     buses, generators, storage, branches, loads, loadZones, shunts, services =
         ps_dict2ps_struct(ps_dict)
 
-    return System(buses, generators, loads, branches, storage, ps_dict["baseMVA"];
+    return _System(buses, generators, loads, branches, storage, ps_dict["baseMVA"];
                   kwargs...);
 end
 
-# - Assign Forecast to System Struct
+# - Assign Forecast to _System Struct
 
 """
 Args:
-    A System struct
+    A _System struct
     A :Symbol=>Array{ <: Forecast,1} Pair denoting the forecast name and array of device forecasts
 Returns:
-    A System struct with a modified forecasts field
+    A _System struct with a modified forecasts field
 """
-function add_forecast!(sys::System,fc::Pair{Symbol,Array{Forecast,1}})
+function add_forecast!(sys::_System,fc::Pair{Symbol,Array{Forecast,1}})
     sys.forecasts[fc.first] = fc.second
 end
 
-"""A System struct that stores all devices in arrays with concrete types.
-This is a temporary implementation that will allow consumers of PowerSystems to test the
-functionality before it is finalized.
 """
-struct ConcreteSystem <: PowerSystemType
+    System
+
+    A power system defined by fields for basepower, components, and forecasts.
+
+    # Constructor
+    ```julia
+    System(buses, generators, loads, branches, storage, basepower, forecasts, services, annex; kwargs...)
+    System(buses, generators, loads, basepower; kwargs...)
+    System(ps_dict; kwargs...)
+    System(file, ts_folder; kwargs...)
+    System(; kwargs...)
+    ```
+
+    # Arguments
+
+    * `buses`::Vector{Bus} : an array of buses
+    * `generators`::Vector{Generator} : an array of generators of (possibly) different types
+    * `loads`::Vector{ElectricLoad} : an array of load specifications that includes timing of the loads
+    * `branches`::Union{Nothing, Vector{Branch}} : an array of branches; may be `nothing`
+    * `storage`::Union{Nothing, Vector{Storage}} : an array of storage devices; may be `nothing`
+    * `basepower`::Float64 : the base power value for the system 
+    * `ps_dict`::Dict{String,Any} : the dictionary object containing System data
+    * `forecasts`::Union{Nothing, SystemForecasts} : dictionary of forecasts
+    * `services`::Union{Nothing, Vector{ <: Service}} : an array of services; may be `nothing`
+    * `file`::String, `ts_folder`::String : the filename and foldername that contain the System data
+
+    # Keyword arguments
+
+    * `runchecks`::Bool : run available checks on input fields
+    DOCTODO: any other keyword arguments? genmap_file, REGEX_FILE
+"""
+struct System <: PowerSystemType
     components::Dict{DataType, Vector{<:Component}}    # Contains arrays of concrete types.
     forecasts::Union{Nothing, SystemForecasts}
     basepower::Float64                                 # [MVA]
+    internal::PowerSystemInternal
 end
 
-function ConcreteSystem(sys::System)
+function System(components, forecasts, basepower)
+    return System(components, forecasts, basepower, PowerSystemInternal())
+end
+
+function System(sys::_System)
     components = Dict{DataType, Vector{<:Component}}()
-    concrete_sys = ConcreteSystem(components, sys.forecasts, sys.basepower)
+    concrete_sys = System(components, sys.forecasts, sys.basepower)
 
     for field in (:buses, :loads)
         for obj in getfield(sys, field)
@@ -192,8 +200,138 @@ function ConcreteSystem(sys::System)
     return concrete_sys
 end
 
+
+"""Primary System constructor. Funnel point for all other outer constructors."""
+function System(buses::Vector{Bus},
+                generators::Vector{<:Generator},
+                loads::Vector{<:ElectricLoad},
+                branches::Union{Nothing, Vector{<:Branch}},
+                storage::Union{Nothing, Vector{<:Storage}},
+                basepower::Float64,
+                forecasts::Union{Nothing, SystemForecasts},
+                services::Union{Nothing, Vector{ <: Service}},
+                annex::Union{Nothing,Dict}; kwargs...)
+
+    
+    _sys = _System(buses, generators, loads, branches, storage, basepower, forecasts, services, annex; kwargs...)
+    return System(_sys)
+end
+
+"""System constructor without nothing-able arguments."""
+function System(buses::Vector{Bus},
+                generators::Vector{<:Generator},
+                loads::Vector{<:ElectricLoad},
+                basepower::Float64; kwargs...)
+
+    
+    return System(buses, generators, loads, nothing, nothing, basepower, nothing, nothing, nothing; kwargs...)
+end
+
+"""Constructs System with default values."""
+function System(; buses=[Bus()],
+                generators=[ThermalDispatch(), RenewableFix()],
+                loads=[PowerLoad()],
+                branches=nothing,
+                storage=nothing,
+                basepower=100.0,
+                forecasts = nothing,
+                services = nothing,
+                annex = nothing,
+                kwargs...)
+    return System(buses, generators, loads, branches, storage, basepower, forecasts, services, annex; kwargs...)
+end
+
+"""Constructs System from a ps_dict."""
+function System(ps_dict::Dict{String,Any}; kwargs...)
+    buses, generators, storage, branches, loads, loadZones, shunts, forecasts, services =
+        ps_dict2ps_struct(ps_dict)
+
+    return System(buses, generators, loads, branches, storage, ps_dict["baseMVA"],
+                  forecasts, services, Dict(:LoadZones=>loadZones);
+                  kwargs...);
+end
+
+"""Constructs System from a file containing Matpower, PTI, or JSON data."""
+function System(file::String, ts_folder::String; kwargs...)
+    ps_dict = parsestandardfiles(file,ts_folder; kwargs...)
+    buses, generators, storage, branches, loads, loadZones, shunts, services =
+        ps_dict2ps_struct(ps_dict)
+
+    return System(buses, generators, loads, branches, storage, ps_dict["baseMVA"];
+                  kwargs...);
+end
+
+"""Constructs a System from a JSON file."""
+function System(filename::String)
+    return from_json(System, filename)
+end
+
+"""Deserializes a System from String or IO."""
+function from_json(io::Union{IO, String}, ::Type{System})
+    components = Dict{DataType, Vector{<: Component}}()
+    raw = JSON2.read(io, NamedTuple)
+
+    names_and_types = [(x, getfield(PowerSystems, Symbol(strip_module_names(string(x)))))
+                        for x in fieldnames(typeof(raw.components))]
+
+    # Deserialize each component into the correct type.
+    # JSON versions of Service and Deterministic objects have UUIDs for components instead
+    # of actual components, so they have to be skipped on the first pass.
+    for (name, component_type) in names_and_types
+        components[component_type] = Vector{component_type}()
+        if component_type <: Service
+            continue
+        end
+
+        for component in getfield(raw.components, name)
+            obj = convert_type(component_type, component)
+            push!(components[component_type], obj)
+        end
+    end
+
+    forecasts = SystemForecasts()
+    forecast_names = fieldnames(typeof(raw.forecasts))
+    for name in forecast_names
+        forecasts[name] = Vector{Forecast}()
+        for forecast in getfield(raw.forecasts, name)
+            # Infer Deterministic structs by the presence of the field component.
+            if !(:component in fieldnames(typeof(forecast)))
+                push!(forecasts[name], convert_type(getfield(PowerSystems, name)))
+            end
+        end
+    end
+
+    sys = System(components, forecasts, float(raw.basepower))
+
+    # Service objects actually have Device instances, but Forecasts have Components. Since
+    # we are sharing the dict, use the higher-level type.
+    iter = get_components(Component, sys)
+    components = LazyDictFromIterator(Base.UUID, Component, iter, get_uuid)
+    for (name, component_type) in names_and_types
+        if component_type <: Service
+            for component in getfield(raw.components, name)
+                push!(sys.components[component_type],
+                      convert_type(component_type, component, components))
+            end
+        end
+    end
+
+    # Services have been added; reset the iterator to make sure we find them.
+    replace_iterator(components, get_components(Component, sys))
+    for name in forecast_names
+        for forecast in getfield(raw.forecasts, name)
+            if :component in fieldnames(typeof(forecast))
+                push!(sys.forecasts[name],
+                      convert_type(Deterministic, forecast, components))
+            end
+        end
+    end
+
+    return sys
+end
+
 """Adds a component to the system."""
-function add_component!(sys::ConcreteSystem, component::T) where T <: Component
+function add_component!(sys::System, component::T) where T <: Component
     if !isconcretetype(T)
         error("add_component! only accepts concrete types")
     end
@@ -208,12 +346,12 @@ end
 
 """
 Args:
-    A ConcreteSystem struct
+    A System struct
     A :Symbol=>Array{ <: Forecast,1} Pair denoting the forecast name and array of device forecasts
 Returns:
     A System struct with a modified forecasts field
 """
-function add_forecast!(sys::ConcreteSystem,fc::Pair{Symbol,Array{Forecast,1}})
+function add_forecast!(sys::System,fc::Pair{Symbol,Array{Forecast,1}})
     sys.forecasts[fc.first] = fc.second
 end
 
@@ -236,7 +374,7 @@ devices = PowerSystems.get_components(ThermalDispatch, system)
 generators = PowerSystems.get_components(Generator, system)
 ```
 """
-function get_components(::Type{T}, sys::ConcreteSystem)::ComponentIterator{T} where {T <: Component}
+function get_components(::Type{T}, sys::System)::ComponentIterator{T} where {T <: Component}
     if isconcretetype(T)
         components = get(sys.components, T, nothing)
         if isnothing(components)
@@ -251,7 +389,7 @@ function get_components(::Type{T}, sys::ConcreteSystem)::ComponentIterator{T} wh
 end
 
 """Shows the component types and counts in a table."""
-function Base.summary(io::IO, sys::ConcreteSystem)
+function Base.summary(io::IO, sys::System)
     counts = Dict{String, Int}()
 
     rows = []
@@ -269,4 +407,26 @@ function Base.summary(io::IO, sys::ConcreteSystem)
 
     #df = DataFrames.DataFrame(rows)
     print(io, "This is currently broken")
+end
+
+function compare_values(x::System, y::System)::Bool
+    match = true
+    for key in keys(x.components)
+        if !compare_values(x.components[key], y.components[key])
+            @debug "System components do not match"
+            match = false
+        end
+    end
+
+    if !compare_values(x.forecasts, y.forecasts)
+        @debug "System forecasts do not match"
+        match = false
+    end
+
+    if x.basepower != y.basepower
+        @debug "basepower does not match" x.basepower y.basepower
+        match = false
+    end
+
+    return match
 end
