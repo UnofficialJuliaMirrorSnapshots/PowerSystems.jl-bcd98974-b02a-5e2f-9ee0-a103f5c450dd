@@ -85,6 +85,10 @@ function get_issue_time(forecast::Forecast)
     return IssueTime((forecast.resolution, forecast.initialtime))
 end
 
+function Base.length(forecast::Forecast)
+    return length(forecast.data)
+end
+
 """
     Deterministic
         A deterministic forecast for a particular data field in a PowerSystemDevice.
