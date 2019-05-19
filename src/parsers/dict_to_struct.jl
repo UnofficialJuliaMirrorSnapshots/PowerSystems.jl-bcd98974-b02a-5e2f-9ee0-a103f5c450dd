@@ -163,7 +163,10 @@ function read_datetime(df; kwargs...)
         DataFrames.deletecols!(df, [:Year,:Month,:Day,:Period])
 
     elseif :DateTime in names(df)
-        df[:DateTime] = Dates.DateTime(df[:DateTime])
+        @warn "dataframe already has DateTime column"
+        if typeof(df[:DateTime]) != Vector{Dates.DateTime}
+            df[:DateTime] = Dates.DateTime(df[:DateTime])
+        end
     else
         if :startdatetime in keys(kwargs)
             startdatetime = kwargs[:startdatetime]
@@ -256,7 +259,14 @@ end
 
 ## - Parse Dict to Struct
 function bus_dict_parse(dict::Dict{Int,Any})
-    Buses = [Bus(b["number"],b["name"], b["bustype"],b["angle"],b["voltage"],b["voltagelimits"],b["basevoltage"]) for (k_b,b) in dict ]
+    Buses = Vector{Bus}()
+    for (k_b, b) in dict
+        if b isa Bus
+            push!(Buses, b)
+        else
+            push!(Buses, Bus(b["number"],b["name"], b["bustype"],b["angle"],b["voltage"],b["voltagelimits"],b["basevoltage"]))
+        end
+    end
     return Buses
 end
 
@@ -271,7 +281,8 @@ function gen_dict_parser(dict::Dict{String,Any})
                 push!(Generators,ThermalDispatch(string(thermal_dict["name"]),
                                                             Bool(thermal_dict["available"]),
                                                             thermal_dict["bus"],
-                                                            TechThermal(thermal_dict["tech"]["activepower"],
+                                                            TechThermal(thermal_dict["tech"]["rating"],
+                                                                        thermal_dict["tech"]["activepower"],
                                                                         thermal_dict["tech"]["activepowerlimits"],
                                                                         thermal_dict["tech"]["reactivepower"],
                                                                         thermal_dict["tech"]["reactivepowerlimits"],
@@ -290,7 +301,7 @@ function gen_dict_parser(dict::Dict{String,Any})
                 push!(Generators,HydroCurtailment(string(hydro_dict["name"]),
                                                             Bool(hydro_dict["available"]),
                                                             hydro_dict["bus"],
-                                                            TechHydro(  hydro_dict["tech"]["installedcapacity"],
+                                                            TechHydro(  hydro_dict["tech"]["rating"],
                                                                         hydro_dict["tech"]["activepower"],
                                                                         hydro_dict["tech"]["activepowerlimits"],
                                                                         hydro_dict["tech"]["reactivepower"],
@@ -307,7 +318,7 @@ function gen_dict_parser(dict::Dict{String,Any})
                         push!(Generators,RenewableCurtailment(string(pv_dict["name"]),
                                                                     Bool( pv_dict["available"]),
                                                                     pv_dict["bus"],
-                                                                    pv_dict["tech"]["installedcapacity"],
+                                                                    pv_dict["tech"]["rating"],
                                                                     EconRenewable(pv_dict["econ"]["curtailcost"],
                                                                                 pv_dict["econ"]["interruptioncost"])
                                     ))
@@ -317,7 +328,7 @@ function gen_dict_parser(dict::Dict{String,Any})
                         push!(Generators,RenewableFix(string(rtpv_dict["name"]),
                                                                     Bool(rtpv_dict["available"]),
                                                                     rtpv_dict["bus"],
-                                                                    rtpv_dict["tech"]["installedcapacity"]
+                                                                    rtpv_dict["tech"]["rating"]
                                     ))
                     end
                 elseif ren_key == "WIND"
@@ -325,7 +336,7 @@ function gen_dict_parser(dict::Dict{String,Any})
                         push!(Generators,RenewableCurtailment(string(wind_dict["name"]),
                                                                     Bool(wind_dict["available"]),
                                                                     wind_dict["bus"],
-                                                                    wind_dict["tech"]["installedcapacity"],
+                                                                    wind_dict["tech"]["rating"],
                                                                     EconRenewable(wind_dict["econ"]["curtailcost"],
                                                                                 wind_dict["econ"]["interruptioncost"])
                                     ))
@@ -339,6 +350,7 @@ function gen_dict_parser(dict::Dict{String,Any})
                                                             storage_dict["bus"],
                                                             storage_dict["energy"],
                                                             storage_dict["capacity"],
+                                                            storage_dict["rating"],
                                                             storage_dict["activepower"],
                                                             storage_dict["inputactivepowerlimits"],
                                                             storage_dict["outputactivepowerlimits"],

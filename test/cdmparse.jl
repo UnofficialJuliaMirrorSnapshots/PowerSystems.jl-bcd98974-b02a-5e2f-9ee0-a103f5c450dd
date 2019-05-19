@@ -13,22 +13,11 @@ end
 
     rts_da = PowerSystems.make_forecast_array(sys_rts, cdm_dict["forecasts"]["DA"])
     @test length(rts_da[1].data) == 24
-    @test length(rts_da) == 141
+    @test length(rts_da) == 211
 
     rts_rt = PowerSystems.make_forecast_array(sys_rts, cdm_dict["forecasts"]["RT"])
     @test length(rts_rt[1].data) == 288
-    @test length(rts_rt) == 134
-
-    cs_rts = System(cdm_dict)
-    @test cs_rts isa System
-
-    rts_da_cs = PowerSystems.make_forecast_array(cs_rts, cdm_dict["forecasts"]["DA"])
-    @test length(rts_da[1].data) == 24
-    @test length(rts_da) == 141 # TODO: seems to be missing service forecasts
-
-    rts_rt_cs = PowerSystems.make_forecast_array(cs_rts, cdm_dict["forecasts"]["RT"])
-    @test length(rts_rt[1].data) == 288
-    @test length(rts_rt) == 134
+    @test length(rts_rt) == 204
 end
 
 @testset "CDM parsing invalid directory" begin
@@ -91,7 +80,7 @@ end
     mpgen = collect(get_components(HydroGen, mpsys))[1]
     @test cdmgen.tech.activepowerlimits == mpgen.tech.activepowerlimits
     @test cdmgen.tech.reactivepowerlimits == mpgen.tech.reactivepowerlimits
-    @test cdmgen.tech.installedcapacity == mpgen.tech.installedcapacity
+    @test cdmgen.tech.rating == mpgen.tech.rating
     @test cdmgen.tech.ramplimits == mpgen.tech.ramplimits # this gets adjusted in the pm2ps_dict 
     @test compare_values_without_uuids(cdmgen.econ, mpgen.econ)
 
