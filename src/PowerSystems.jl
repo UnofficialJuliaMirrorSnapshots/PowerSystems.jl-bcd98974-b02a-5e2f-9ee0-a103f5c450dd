@@ -29,7 +29,6 @@ export TapTransformer
 export PhaseShiftingTransformer
 
 export Forecast
-export IssueTime
 export Deterministic
 export Scenarios
 export Probabilistic
@@ -39,7 +38,7 @@ export GenClasses
 
 export HydroGen
 export HydroFix
-export HydroCurtailment
+export HydroDispatch
 export HydroStorage
 export TechHydro
 export EconHydro
@@ -48,19 +47,19 @@ export RenewableGen
 export TechRenewable
 export EconRenewable
 export RenewableFix
-export RenewableCurtailment
-export RenewableFullDispatch
+export RenewableDispatch
 
 export ThermalGen
 export TechThermal
 export EconThermal
-export ThermalDispatch
+export ThermalStandard
 
 export ElectricLoad
 export StaticLoad
 export PowerLoad
 export PowerLoadPF
 export FixedAdmittance
+export EconLoad
 export ControllableLoad
 export InterruptibleLoad
 
@@ -78,13 +77,18 @@ export parse_file
 export ps_dict2ps_struct
 export add_forecasts!
 export remove_forecast!
+export get_forecast_initial_times
 export get_forecasts
-export get_forecast_issue_times
-export get_issue_time
+export get_forecasts_horizon
+export get_forecasts_initial_time
+export get_forecasts_interval
+export get_forecasts_resolution
+export iterate_forecasts
 export read_data_files
 export validate
 export add_component!
 export get_components
+export iterate_components
 export to_json
 export from_json
 

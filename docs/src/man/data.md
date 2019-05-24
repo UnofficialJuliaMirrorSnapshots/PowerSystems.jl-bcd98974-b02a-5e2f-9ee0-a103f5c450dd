@@ -31,17 +31,26 @@ jq '.components.Devices.Injection.Generator | keys' system.json
 
 ## View specific components.
 ```
-jq '.components.Device.Injection.Generator.ThermalGen.ThermalDispatch' system.json
-jq '.components.Device.Injection.Generator.ThermalGen.ThermalDispatch[0]' system.json
+jq '.components.Device.Injection.Generator.ThermalGen.ThermalStandard' system.json
+jq '.components.Device.Injection.Generator.ThermalGen.ThermalStandard[0]' system.json
 ```
 
 ## Filter on a parameter.
 ```
-jq '.components.Device.Injection.Generator.ThermalGen.ThermalDispatch | .[] | select(.name == "107_CC_1")' system.json
-jq '.components.Device.Injection.Generator.ThermalGen.ThermalDispatch | .[] | select(.econ.capacity > 3)' system.json
+jq '.components.Device.Injection.Generator.ThermalGen.ThermalStandard | .[] | select(.name == "107_CC_1")' system.json
+jq '.components.Device.Injection.Generator.ThermalGen.ThermalStandard | .[] | select(.econ.capacity > 3)' system.json
 ```
 
 ## Output a table with select fields.
 ```
-jq -r '["name", "econ.capacity"], (.components.Device.Injection.Generator.ThermalGen.ThermalDispatch | .[] | [.name, .econ.capacity]) | @tsv' system.json
+jq -r '["name", "econ.capacity"], (.components.Device.Injection.Generator.ThermalGen.ThermalStandard | .[] | [.name, .econ.capacity]) | @tsv' system.json
 ```
+
+## View the forecast types and initial_time values.
+jq '.forecasts.data | keys' system.json
+
+## View the fields of a forecast.
+jq '.forecasts.data["PowerSystems._ForecastKey(2020-01-01T00:00:00, Deterministic{Bus})"][0] | keys'
+
+## View the value of every field in an array of forecasts.
+jq '.forecasts.data["PowerSystems._ForecastKey(2020-01-01T00:00:00, Deterministic{Bus})"] | .[].initial_time'
