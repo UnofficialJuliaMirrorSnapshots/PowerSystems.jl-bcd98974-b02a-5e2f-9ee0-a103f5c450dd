@@ -1,3 +1,4 @@
+import JSON2
 
 function validate_serialization(sys::System)
     path, io = mktemp()
@@ -22,8 +23,7 @@ function validate_serialization(sys::System)
 end
 
 @testset "Test JSON serialization" begin
-    cdm_dict = PowerSystems.csv2ps_dict(RTS_GMLC_DIR, 100.0)
-    sys = System(cdm_dict)
+    sys = create_rts_system()
     @test validate_serialization(sys)
 
     # Serialize specific components.
@@ -38,6 +38,9 @@ end
             @test PowerSystems.compare_values(component, component2)
         end
     end
+
+    text = JSON2.write(sys.components)
+    @test length(text) > 0
 end
 
 @testset "Test serialization utility functions" begin

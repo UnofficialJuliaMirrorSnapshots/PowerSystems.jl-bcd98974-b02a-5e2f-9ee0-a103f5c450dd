@@ -1,121 +1,5 @@
-### Struct and different Power System constructors depending on the data provided ####
 
-"""
-    _System
-
-An internal struct that collects system components.
-
-# Constructors are identical to `System`
-
-"""
-struct _System <: PowerSystemType
-    # DOCTODO docs for _System fields are currently not working, JJS 1/15/19
-    buses::Vector{Bus}
-    generators::GenClasses
-    loads::Vector{<:ElectricLoad}
-    branches::Union{Nothing, Vector{<:Branch}}
-    storage::Union{Nothing, Vector{<:Storage}}
-    basepower::Float64 # [MVA]
-    forecasts::Union{Nothing, SystemForecastsDeprecated}
-    services::Union{Nothing, Vector{ <: Service}}
-    annex::Union{Nothing,Dict{Any,Any}}
-#=
-    function _System(buses, generators, loads, branches, storage, basepower,
-                    forecasts, services, annex; kwargs...)
-
-        sys = new(buses, generators, loads, branches, storage, basepower,
-                    forecasts, services, annex; kwargs...)
-
-        # TODO Default validate to true once validation code is written.
-        if get(kwargs, :validate, false) && !validate(sys)
-            error("System is not valid")
-        end
-
-        return sys
-    end=#
-end
-
-"""Primary _System constructor. Funnel point for all other outer constructors."""
-function _System(buses::Vector{Bus},
-                generators::Vector{<:Generator},
-                loads::Vector{<:ElectricLoad},
-                branches::Union{Nothing, Vector{<:Branch}},
-                storage::Union{Nothing, Vector{<:Storage}},
-                basepower::Float64,
-                forecasts::Union{Nothing, SystemForecastsDeprecated},
-                services::Union{Nothing, Vector{ <: Service}},
-                annex::Union{Nothing,Dict}; kwargs...)
-
-    runchecks = get(kwargs, :runchecks, true)
-    if runchecks
-        slackbuscheck(buses)
-        buscheck(buses)
-        if !isnothing(branches)
-            calculatethermallimits!(branches, basepower)
-            check_branches!(branches)
-        end
-
-        pvbuscheck(buses, generators)
-    end
-    # This constructor receives an array of Generator structs. It separates them by category
-    # in GenClasses.
-    gen_classes = genclassifier(generators)
-
-    if !( isnothing(forecasts) || isempty(forecasts) )
-        timeseriescheckforecast(forecasts)
-    end
-
-    return _System(buses, gen_classes, loads, branches, storage, basepower, forecasts, services, annex)
-end
-
-"""Constructs _System with default values."""
-function _System(; buses=[Bus()],
-                generators=[ThermalStandard(), RenewableFix()],
-                loads=[PowerLoad()],
-                branches=nothing,
-                storage=nothing,
-                basepower=100.0,
-                forecasts = nothing,
-                services = nothing,
-                annex = nothing,
-                kwargs...)
-    return _System(buses, generators, loads, branches, storage, basepower, forecasts, services, annex; kwargs...)
-end
-
-"""Constructs _System from a ps_dict."""
-function _System(ps_dict::Dict{String,Any}; kwargs...)
-    buses, generators, storage, branches, loads, loadZones, shunts, forecasts, services =
-        ps_dict2ps_struct(ps_dict)
-
-    return _System(buses, generators, loads, branches, storage, ps_dict["baseMVA"],
-                  forecasts, services, Dict(:LoadZones=>loadZones);
-                  kwargs...);
-end
-
-"""Constructs _System from a file containing Matpower, PTI, or JSON data."""
-function _System(file::String, ts_folder::String; kwargs...)
-    ps_dict = parsestandardfiles(file,ts_folder; kwargs...)
-    buses, generators, storage, branches, loads, loadZones, shunts, services =
-        ps_dict2ps_struct(ps_dict)
-
-    return _System(buses, generators, loads, branches, storage, ps_dict["baseMVA"];
-                  kwargs...);
-end
-
-# - Assign Forecast to _System Struct
-
-"""
-Args:
-    A _System struct
-    A :Symbol=>Array{ <: Forecast,1} Pair denoting the forecast name and array of device forecasts
-Returns:
-    A _System struct with a modified forecasts field
-"""
-function add_forecast!(sys::_System,fc::Pair{Symbol,Array{Forecast,1}})
-    sys.forecasts[fc.first] = fc.second
-end
-
-const Components = Dict{DataType, Vector{<:Component}}
+const Components = Dict{DataType, Dict{String, <:Component}}
 
 """
     System
@@ -124,10 +8,12 @@ const Components = Dict{DataType, Vector{<:Component}}
 
     # Constructor
     ```julia
+    System(basepower)
+    System(components, forecasts, basepower)
     System(buses, generators, loads, branches, storage, basepower, forecasts, services, annex; kwargs...)
     System(buses, generators, loads, basepower; kwargs...)
-    System(ps_dict; kwargs...)
-    System(file, ts_folder; kwargs...)
+    System(file; kwargs...)
+    System(; buses, generators, loads, branches, storage, basepower, forecasts, services, annex, kwargs...)
     System(; kwargs...)
     ```
 
@@ -139,10 +25,8 @@ const Components = Dict{DataType, Vector{<:Component}}
     * `branches`::Union{Nothing, Vector{Branch}} : an array of branches; may be `nothing`
     * `storage`::Union{Nothing, Vector{Storage}} : an array of storage devices; may be `nothing`
     * `basepower`::Float64 : the base power value for the system
-    * `ps_dict`::Dict{String,Any} : the dictionary object containing System data
     * `forecasts`::Union{Nothing, SystemForecasts} : dictionary of forecasts
     * `services`::Union{Nothing, Vector{ <: Service}} : an array of services; may be `nothing`
-    * `file`::String, `ts_folder`::String : the filename and foldername that contain the System data
 
     # Keyword arguments
 
@@ -150,60 +34,24 @@ const Components = Dict{DataType, Vector{<:Component}}
     DOCTODO: any other keyword arguments? genmap_file, REGEX_FILE
 """
 struct System <: PowerSystemType
-    components::Components    # Contains arrays of concrete types.
-    forecasts::Union{Nothing, SystemForecasts}
-    basepower::Float64                                 # [MVA]
+    components::Components
+    forecasts::SystemForecasts
+    basepower::Float64             # [MVA]
     internal::PowerSystemInternal
+end
+
+"""Construct an empty System. Useful for building a System while parsing raw data."""
+function System(basepower)
+    components = Dict{DataType, Vector{<:Component}}()
+    forecasts = SystemForecasts()
+    return System(components, forecasts, basepower)
 end
 
 function System(components, forecasts, basepower)
     return System(components, forecasts, basepower, PowerSystemInternal())
 end
 
-function System(sys::_System)
-    components = Dict{DataType, Vector{<:Component}}()
-    forecasts = isnothing(sys.forecasts) ? nothing : SystemForecasts(sys.forecasts)
-    concrete_sys = System(components, forecasts, sys.basepower)
-
-    for field in (:buses, :loads)
-        for obj in getfield(sys, field)
-            add_component!(concrete_sys, obj)
-        end
-    end
-
-    for field in (:thermal, :renewable, :hydro)
-        generators = getfield(sys.generators, field)
-        if !isnothing(generators)
-            for gen in generators
-                add_component!(concrete_sys, gen)
-            end
-        end
-    end
-
-    for field in (:branches, :storage, :services)
-        objs = getfield(sys, field)
-        if !isnothing(objs)
-            for obj in objs
-                add_component!(concrete_sys, obj)
-            end
-        end
-    end
-
-    load_zones = isnothing(sys.annex) ? nothing : get(sys.annex, :LoadZones, nothing)
-    if !isnothing(load_zones)
-        for lz in load_zones
-            add_component!(concrete_sys, lz)
-        end
-    end
-
-    for (key, value) in concrete_sys.components
-        @debug "components: $(string(key)): count=$(string(length(value)))"
-    end
-
-    return concrete_sys
-end
-
-"""Primary System constructor. Funnel point for all other outer constructors."""
+"""System constructor when components are constructed externally."""
 function System(buses::Vector{Bus},
                 generators::Vector{<:Generator},
                 loads::Vector{<:ElectricLoad},
@@ -213,8 +61,46 @@ function System(buses::Vector{Bus},
                 forecasts::Union{Nothing, SystemForecasts},
                 services::Union{Nothing, Vector{ <: Service}},
                 annex::Union{Nothing,Dict}; kwargs...)
-    _sys = _System(buses, generators, loads, branches, storage, basepower, forecasts, services, annex; kwargs...)
-    return System(_sys)
+
+    components = Dict{DataType, Vector{<:Component}}()
+
+    if isnothing(forecasts)
+        forecasts = SystemForecasts()
+    end
+    sys = System(components, forecasts, basepower)
+
+    arrays = [buses, generators, loads]
+    if !isnothing(branches)
+        push!(arrays, branches)
+    end
+    if !isnothing(storage)
+        push!(arrays, storage)
+    end
+    if !isnothing(services)
+        push!(arrays, services)
+    end
+
+    for component in Iterators.flatten(arrays)
+        add_component!(sys, component)
+    end
+
+    load_zones = isnothing(annex) ? nothing : get(annex, :LoadZones, nothing)
+    if !isnothing(load_zones)
+        for lz in load_zones
+            add_component!(sys, lz)
+        end
+    end
+
+    for (key, value) in sys.components
+        @debug "components: $(string(key)): count=$(string(length(value)))"
+    end
+
+    runchecks = get(kwargs, :runchecks, true)
+    if runchecks
+        check!(sys)
+    end
+
+    return sys
 end
 
 """System constructor without nothing-able arguments."""
@@ -225,10 +111,24 @@ function System(buses::Vector{Bus},
     return System(buses, generators, loads, nothing, nothing, basepower, nothing, nothing, nothing; kwargs...)
 end
 
-"""Constructs System with default values."""
-function System(; buses=[Bus()],
-                generators=[ThermalStandard(), RenewableFix()],
-                loads=[PowerLoad()],
+"""System constructor with keyword arguments."""
+function System(; basepower=100.0,
+                buses,
+                generators,
+                loads,
+                branches,
+                storage,
+                forecasts,
+                services,
+                annex,
+                kwargs...)
+    return System(buses, generators, loads, branches, storage, basepower, forecasts, services, annex; kwargs...)
+end
+
+"""Constructs a non-functional System for demo purposes."""
+function System(::Nothing; buses=[Bus(nothing)],
+                generators=[ThermalStandard(nothing), RenewableFix(nothing)],
+                loads=[PowerLoad(nothing)],
                 branches=nothing,
                 storage=nothing,
                 basepower=100.0,
@@ -239,19 +139,25 @@ function System(; buses=[Bus()],
     return System(buses, generators, loads, branches, storage, basepower, forecasts, services, annex; kwargs...)
 end
 
-"""Constructs System from a ps_dict."""
-function System(ps_dict::Dict{String,Any}; kwargs...)
-    return System(_System(ps_dict; kwargs...))
-end
-
-"""Constructs System from a file containing Matpower, PTI, or JSON data."""
-function System(file::String, ts_folder::String; kwargs...)
-    return System(_System(file, ts_folder; kwargs...))
-end
-
 """Constructs a System from a JSON file."""
 function System(filename::String)
-    return from_json(System, filename)
+    sys = from_json(System, filename)
+    check!(sys)
+    return sys
+end
+
+function check!(sys::System)
+    buses = get_components(Bus, sys)
+    slack_bus_check(buses)
+    buscheck(buses)
+
+    branches = get_components(Branch, sys)
+    if length(branches) > 0
+        calculate_thermal_limits!(branches, sys.basepower)
+        check_branches!(branches)
+    end
+
+    generators = get_components(Generator, sys)
 end
 
 """Iterates over all components.
@@ -294,10 +200,28 @@ function iterate_forecasts(sys::System)
     end
 end
 
+function JSON2.write(io::IO, components::Components)
+    return JSON2.write(io, encode_for_json(components))
+end
+
+function JSON2.write(components::Components)
+    return JSON2.write(encode_for_json(components))
+end
+
+function encode_for_json(components::Components)
+    # Convert each name-to-value component dictionary to arrays.
+    new_components = Dict{DataType, Vector{<:Component}}()
+    for (data_type, component_dict) in components
+        new_components[data_type] = [x for x in values(component_dict)]
+    end
+
+    return new_components
+end
+
 """Deserializes a System from String or IO."""
 function from_json(io::Union{IO, String}, ::Type{System})
-    components = Dict{DataType, Vector{<: Component}}()
     raw = JSON2.read(io, NamedTuple)
+    sys = System(float(raw.basepower))
 
     names_and_types = [(x, getfield(PowerSystems, Symbol(strip_module_names(string(x)))))
                         for x in fieldnames(typeof(raw.components))]
@@ -306,18 +230,14 @@ function from_json(io::Union{IO, String}, ::Type{System})
     # JSON versions of Service and Forecast objects have UUIDs for components instead
     # of actual components, so they have to be skipped on the first pass.
     for (name, component_type) in names_and_types
-        components[component_type] = Vector{component_type}()
         if component_type <: Service
             continue
         end
 
         for component in getfield(raw.components, name)
-            obj = convert_type(component_type, component)
-            push!(components[component_type], obj)
+            add_component!(sys, convert_type(component_type, component))
         end
     end
-
-    sys = System(components, SystemForecasts(raw.forecasts), float(raw.basepower))
 
     # Service objects actually have Device instances, but Forecasts have Components. Since
     # we are sharing the dict, use the higher-level type.
@@ -326,8 +246,7 @@ function from_json(io::Union{IO, String}, ::Type{System})
     for (name, component_type) in names_and_types
         if component_type <: Service
             for component in getfield(raw.components, name)
-                push!(sys.components[component_type],
-                      convert_type(component_type, component, components))
+                add_component!(sys, convert_type(component_type, component, components))
             end
         end
     end
@@ -339,18 +258,47 @@ function from_json(io::Union{IO, String}, ::Type{System})
     return sys
 end
 
-"""Adds a component to the system."""
+"""
+    add_component!(sys::System, component::T) where T <: Component
+
+Add a component to the system.
+
+Throws InvalidParameter if the component's name is already stored for its concrete type.
+"""
 function add_component!(sys::System, component::T) where T <: Component
     if !isconcretetype(T)
         error("add_component! only accepts concrete types")
     end
 
     if !haskey(sys.components, T)
-        sys.components[T] = Vector{T}()
+        sys.components[T] = Dict{String, T}()
+    elseif haskey(sys.components[T], component.name)
+        throw(InvalidParameter("$(component.name) is already stored for type $T"))
     end
 
-    push!(sys.components[T], component)
+    sys.components[T][component.name] = component
     return nothing
+end
+
+function get_bus(sys::System, bus_number::Int)
+    for bus in get_components(Bus, sys)
+        if bus.number == bus_number
+            return bus
+        end
+    end
+
+    return nothing
+end
+
+function get_buses(sys::System, bus_numbers::Set{Int})
+    buses = Vector{Bus}()
+    for bus in get_components(Bus, sys)
+        if bus.number in bus_numbers
+            push!(buses, bus)
+        end
+    end
+
+    return buses
 end
 
 """
@@ -362,41 +310,38 @@ Add forecasts to the system.
 - `sys::System`: system
 - `forecasts`: iterable (array, iterator, etc.) of Forecast values
 
-Throws DataFormatError if a component-label pair is not unique within a forecast array.
+Throws DataFormatError if
+- A component-label pair is not unique within a forecast array.
+- A forecast has a different resolution than others.
+- A forecast has a different horizon than others.
+
+Throws InvalidParameter if the forecast's component is not stored in the system.
 
 """
 function add_forecasts!(sys::System, forecasts)
+    if length(forecasts) == 0
+        return
+    end
+
+    # Validate that each forecast's component is stored in the system.
     for forecast in forecasts
-        _add_forecast!(sys.forecasts, forecast)
-    end
+        comp = forecast.component
+        ctype = typeof(comp)
+        component = get_component(ctype, sys, get_name(comp))
+        if isnothing(component)
+            throw(InvalidParameter("no $ctype with name=$(get_name(comp)) is stored"))
+        end
 
-    if !_validate_component_label_uniqueness(sys.forecasts)
-        throw(DataFormatError("components/labels are not unique within forecast array"))
-    end
-end
-
-function _add_forecast!(forecasts::SystemForecasts, forecast::T) where T <: Forecast
-    _add_forecast!(forecasts.data, forecast)
-end
-
-function _validate_component_label_uniqueness(system_forecasts::SystemForecasts)::Bool
-    match = true
-
-    for (key, forecasts) in system_forecasts.data
-        unique_components = Set{Tuple{<:Component, String}}()
-        for forecast in forecasts
-            component_label = (forecast.component, forecast.label)
-            if component_label in unique_components
-                match = false
-                @error("not all components in forecast vector are unique", component_label,
-                       key.initial_time)
-            else
-                push!(unique_components, component_label)
-            end
+        user_uuid = get_uuid(comp)
+        ps_uuid = get_uuid(component)
+        if user_uuid != ps_uuid
+            throw(InvalidParameter(
+                "forecast component UUID doesn't match, perhaps it was copied?; " *
+                "$ctype name=$(get_name(comp)) user=$user_uuid system=$ps_uuid"))
         end
     end
 
-    return match
+    _add_forecasts!(sys.forecasts, forecasts)
 end
 
 """Return the horizon for all forecasts."""
@@ -444,21 +389,21 @@ function get_forecasts(
                        ::Type{T},
                        sys::System,
                        initial_time::Dates.DateTime,
-                      )::FlattenedVectorsIterator{T} where T <: Forecast
+                      )::FlattenIteratorWrapper{T} where T <: Forecast
     if isconcretetype(T)
-        key = _ForecastKey(initial_time, T)
+        key = ForecastKey(initial_time, T)
         forecasts = get(sys.forecasts.data, key, nothing)
         if isnothing(forecasts)
-            iter = FlattenedVectorsIterator(Vector{Vector{T}}([]))
+            iter = FlattenIteratorWrapper(T, Vector{Vector{T}}([]))
         else
-            iter = FlattenedVectorsIterator(Vector{Vector{T}}([forecasts]))
+            iter = FlattenIteratorWrapper(T, Vector{Vector{T}}([forecasts]))
         end
     else
-        keys_ = [_ForecastKey(initial_time, x.forecast_type)
+        keys_ = [ForecastKey(initial_time, x.forecast_type)
                  for x in keys(sys.forecasts.data) if x.initial_time == initial_time &&
                                                       x.forecast_type <: T]
-        iter = FlattenedVectorsIterator(Vector{Vector{T}}([sys.forecasts.data[x]
-                                                           for x in keys_]))
+        iter = FlattenIteratorWrapper(T, Vector{Vector{T}}([sys.forecasts.data[x]
+                                                            for x in keys_]))
     end
 
     @assert eltype(iter) == T
@@ -530,37 +475,112 @@ end
 """
     remove_forecast(sys::System, forecast::Forecast)
 
-Remove the forecat from the system.
+Remove the forecast from the system.
 
 Throws InvalidParameter if the forecast is not stored.
 """
 function remove_forecast!(sys::System, forecast::T) where T <: Forecast
-    key = _ForecastKey(forecast.initial_time, T)
+    key = ForecastKey(forecast.initial_time, T)
 
     if !haskey(sys.forecasts.data, key)
         throw(InvalidParameter("Forecast not found: $(forecast.label)"))
     end
 
+    found = false
     for (i, forecast_) in enumerate(sys.forecasts.data[key])
         if get_uuid(forecast) == get_uuid(forecast_)
+            found = true
             deleteat!(sys.forecasts.data[key], i)
-            return
+            @info "Deleted forecast $(get_uuid(forecast))"
+            if length(sys.forecasts.data[key]) == 0
+                pop!(sys.forecasts.data, key)
+            end
+            break
         end
     end
 
-    throw(InvalidParameter("Forecast not found: $(forecast.label)"))
+    if !found
+        throw(InvalidParameter("Forecast not found: $(forecast.label)"))
+    end
+
+    if length(sys.forecasts.data) == 0
+        reset_info!(sys.forecasts)
+    end
 end
 
 # TODO: implement methods to remove components. In order to do this we will
 # need each PowerSystemType to store a UUID.
 # GitHub issue #203
 
+"""
+    get_component(
+                  ::Type{T},
+                  sys::System,
+                  name::AbstractString
+                 )::Union{T, Nothing} where {T <: Component}
+
+Get the component of concrete type T with name. Returns nothing if no component matches.
+
+See [`get_components_by_name`](@ref) if the concrete type is unknown.
+
+Throws InvalidParameter if T is not a concrete type.
+"""
+function get_component(
+                       ::Type{T},
+                       sys::System,
+                       name::AbstractString
+                      )::Union{T, Nothing} where {T <: Component}
+    if !isconcretetype(T)
+        throw(InvalidParameter("get_component only supports concrete types: $T"))
+    end
+
+    if !haskey(sys.components, T)
+        @debug "components of type $T are not stored"
+        return nothing
+    end
+
+    return get(sys.components[T], name, nothing)
+end
+
+"""
+    get_components_by_name(
+                           ::Type{T},
+                           sys::System,
+                           name::AbstractString
+                          )::Vector{T} where {T <: Component}
+
+Get the components of abstract type T with name. Note that PowerSystems enforces unique
+names on each concrete type but not across concrete types.
+
+See [`get_component`](@ref) if the concrete type is known.
+
+Throws InvalidParameter if T is not an abstract type.
+"""
+function get_components_by_name(
+                                ::Type{T},
+                                sys::System,
+                                name::AbstractString
+                               )::Vector{T} where {T <: Component}
+    if !isabstracttype(T)
+        throw(InvalidParameter("get_components_by_name only supports abstract types: $T"))
+    end
+
+    components = Vector{T}()
+    for subtype in get_all_concrete_subtypes(T)
+        component = get_component(subtype, sys, name)
+        if !isnothing(component)
+            push!(components, component)
+        end
+    end
+
+    return components
+end
 
 """
     get_components(
                    ::Type{T},
                    sys::System,
-                  )::FlattenedVectorsIterator{T} where {T <: Component}
+                  )::FlattenIteratorWrapper{T} where {T <: Component}
 
 Returns an iterator of components. T can be concrete or abstract.
 Call collect on the result if an array is desired.
@@ -578,18 +598,18 @@ See also: [`iterate_components`](@ref)
 function get_components(
                         ::Type{T},
                         sys::System,
-                       )::FlattenedVectorsIterator{T} where {T <: Component}
+                       )::FlattenIteratorWrapper{T} where {T <: Component}
     if isconcretetype(T)
         components = get(sys.components, T, nothing)
         if isnothing(components)
-            iter = FlattenedVectorsIterator(Vector{Vector{T}}([]))
+            iter = FlattenIteratorWrapper(T, Vector{Base.ValueIterator}([]))
         else
-            iter = FlattenedVectorsIterator(Vector{Vector{T}}([components]))
+            iter = FlattenIteratorWrapper(T,
+                                          Vector{Base.ValueIterator}([values(components)]))
         end
     else
         types = [x for x in get_all_concrete_subtypes(T) if haskey(sys.components, x)]
-        iter = FlattenedVectorsIterator(Vector{Vector{T}}([sys.components[x]
-                                                           for x in types]))
+        iter = FlattenIteratorWrapper(T, [values(sys.components[x]) for x in types])
     end
 
     @assert eltype(iter) == T
@@ -598,8 +618,12 @@ end
 
 """Shows the component types and counts in a table."""
 function Base.summary(io::IO, sys::System)
+    println(io, "System")
+    println(io, "======")
+    println(io, "Base Power: $(sys.basepower)\n")
+
     Base.summary(io, sys.components)
-    println("\n")
+    println(io, "\n")
     Base.summary(io, sys.forecasts)
 end
 

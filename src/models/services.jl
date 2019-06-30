@@ -1,8 +1,6 @@
 
 abstract type Service <: Component end
-
-include("products/reserves.jl")
-include("products/transfers.jl")
+abstract type Reserve <: Service end
 
 """
 All subtypes of Service define contributingdevices::Vector{Device}. The values get populated
@@ -62,7 +60,11 @@ function convert_type(
             real_devices = []
             for item in val
                 uuid = Base.UUID(item.value)
-                push!(real_devices, get(devices, uuid))
+                service = get(devices, uuid)
+                if isnothing(service)
+                    throw(DataFormatError("failed to find $uuid"))
+                end
+                push!(real_devices, service)
             end
             push!(values, real_devices)
         else
