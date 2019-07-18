@@ -56,7 +56,7 @@ function read_bus!(sys::System, data, )
     @info "Reading bus data"
     bus_number_to_bus = Dict{Int, Bus}()
     bus_types = ["PV", "PQ", "REF","isolated"]
-    data = sort(collect(data["bus"]), by = x->parse(Int64,x[1]))    
+    data = sort(collect(data["bus"]), by = x->parse(Int64,x[1]))
 
     if length(data) == 0
         @error "No bus data found" # TODO : need for a model without a bus
@@ -162,6 +162,7 @@ end
 function make_tech_renewable(d)
     tech = TechRenewable(;
         rating=float(d["pmax"]),
+        reactivepower=d["qg"],
         reactivepowerlimits=(min=d["qmin"], max=d["qmax"]),
         powerfactor=1,
     )
@@ -171,13 +172,13 @@ end
 
 function make_renewable_dispatch(gen_name, d, bus)
     tech = make_tech_renewable(d)
-    econ = EconRenewable(0.0, nothing)
+    cost = TwoPartCost(0.0, 0.0)
     generator = RenewableDispatch(;
         name=gen_name,
         available=Bool(d["gen_status"]),
         bus=bus,
         tech=tech,
-        econ=econ,
+        op_cost=cost,
     )
 
     return generator
@@ -218,43 +219,43 @@ end
 """
 The polynomial term follows the convention that for an n-degree polynomial, at least n + 1 components are needed.
     c(p) = c_n*p^n+...+c_1p+c_0
-    c_o is stored in the fixed_cost field in of the Econ Struct
+    c_o is stored in the  field in of the Econ Struct
 """
 function make_thermal_gen(gen_name::AbstractString, d::Dict, bus::Bus)
     if haskey(d, "model")
         model = GeneratorCostModel(d["model"])
         if model == PIECEWISE_LINEAR::GeneratorCostModel
-            cost_component = d["cost"]		        
-            power_p = [i for (ix,i) in enumerate(cost_component) if isodd(ix)]		        
-            cost_p =  [i for (ix,i) in enumerate(cost_component) if iseven(ix)] 
-            cost = [(p,c) for (p,c) in zip(cost_p,power_p)]		     
-            fixedcost = cost[1][2]
+            cost_component = d["cost"]
+            power_p = [i for (ix,i) in enumerate(cost_component) if isodd(ix)]
+            cost_p =  [i for (ix,i) in enumerate(cost_component) if iseven(ix)]
+            cost = [(p,c) for (p,c) in zip(cost_p,power_p)]
+            fixed = cost[1][2]
         elseif model == POLYNOMIAL::GeneratorCostModel
-            if d["ncost"] == 0		         
-                cost = (0.0, 0.0)		           
-                fixedcost = 0.0		                
-            elseif d["ncost"] == 1		            
-                cost = (0.0, 0.0)		                 
-                fixedcost = d["cost"][1]		            
-            elseif d["ncost"] == 2		                 
-                cost = (0.0, d["cost"][1])		            
-                fixedcost = d["cost"][2]		                
-            elseif d["ncost"] == 3		            
-                cost = (d["cost"][1], d["cost"][2]) 		                 
-                fixedcost = d["cost"][3]		             
-            else		                
+            if d["ncost"] == 0
+                cost = (0.0, 0.0)
+                fixed = 0.0
+            elseif d["ncost"] == 1
+                cost = (0.0, 0.0)
+                fixed = d["cost"][1]
+            elseif d["ncost"] == 2
+                cost = (0.0, d["cost"][1])
+                fixed = d["cost"][2]
+            elseif d["ncost"] == 3
+                cost = (d["cost"][1], d["cost"][2])
+                fixed = d["cost"][3]
+            else
                 throw(DataFormatError("invalid value for ncost: $(d["ncost"]). PowerSystems only supports polynomials up to second degree"))
             end
         end
-        startupcost = d["startup"]
-        shutdncost = d["shutdown"]
+        startup = d["startup"]
+        shutdn = d["shutdown"]
     else
         @warn "Generator cost data not included for Generator: $gen_name"
-        tmpcost = EconThermal(nothing)
-        cost = tmpcost.variablecost
-        fixedcost = tmpcost.fixedcost
-        startupcost = tmpcost.startupcost
-        shutdncost = tmpcost.shutdncost
+        tmpcost = ThreePartCost(nothing)
+        cost = tmpcost.variable
+        fixed = tmpcost.fixed
+        startup = tmpcost.startup
+        shutdn = tmpcost.shutdn
     end
 
     # TODO GitHub #148: ramp_agc isn't always present. This value may not be correct.
@@ -269,13 +270,11 @@ function make_thermal_gen(gen_name::AbstractString, d::Dict, bus::Bus)
         ramplimits=(up=ramp_agc / d["mbase"], down=ramp_agc / d["mbase"]),
         timelimits=nothing,
     )
-    econ = EconThermal(;
-        capacity=d["pmax"],
-        variablecost=cost,
-        fixedcost=fixedcost,
-        startupcost=startupcost,
-        shutdncost=shutdncost,
-        annualcapacityfactor=nothing,
+    op_cost = ThreePartCost(;
+        variable=cost,
+        fixed=fixed,
+        startup=startup,
+        shutdn=shutdn,
     )
 
     thermal_gen = ThermalStandard(
@@ -283,7 +282,7 @@ function make_thermal_gen(gen_name::AbstractString, d::Dict, bus::Bus)
         available=Bool(d["gen_status"]),
         bus=bus,
         tech=tech,
-        econ=econ,
+        op_cost=op_cost,
     )
 
     return thermal_gen
@@ -311,7 +310,7 @@ function read_gen!(sys::System, data, bus_number_to_bus::Dict{Int, Bus}; kwargs.
         else
             gen_name = name
         end
-        
+
         bus = bus_number_to_bus[pm_gen["gen_bus"]]
         fuel = get(pm_gen, "fuel", "generic")
         unit_type = get(pm_gen, "type", "generic")
@@ -370,7 +369,7 @@ function make_line(name, d, bus_f, bus_t)
     return Line(;
         name=name,
         available=Bool(d["br_status"]),
-        connectionpoints=(from=bus_f,to=bus_t),
+        arch=Arch(bus_f, bus_t),
         r=d["br_r"],
         x=d["br_x"],
         b=(from=d["b_fr"], to=d["b_to"]),
@@ -383,7 +382,7 @@ function make_transformer_2w(name, d, bus_f, bus_t)
     return Transformer2W(;
         name=name,
         available=Bool(d["br_status"]),
-        connectionpoints=(from=bus_f, to=bus_t),
+        arch=Arch(bus_f, bus_t),
         r=d["br_r"],
         x=d["br_x"],
         primaryshunt=d["b_fr"],  # TODO: which b ??
@@ -395,7 +394,7 @@ function make_tap_transformer(name, d, bus_f, bus_t)
     return TapTransformer(;
         name=name,
         available=Bool(d["br_status"]),
-        connectionpoints=(from=bus_f, to=bus_t),
+        arch=Arch(bus_f, bus_t),
         r=d["br_r"],
         x=d["br_x"],
         tap=d["tap"],
@@ -408,7 +407,7 @@ function make_phase_shifting_transformer(name, d, bus_f, bus_t, alpha)
     return PhaseShiftingTransformer(;
         name=name,
         available=Bool(d["br_status"]),
-        connectionpoints=(from=bus_f, to=bus_t),
+        arch=Arch(bus_f, bus_t),
         r=d["br_r"],
         x=d["br_x"],
         tap=d["tap"],
@@ -439,7 +438,7 @@ function make_dcline(name, d, bus_f, bus_t)
     return HVDCLine(;
         name=name,
         available=Bool(d["br_status"]),
-        connectionpoints=(from=bus_f, to=bus_t),
+        arch=Arch(bus_f, bus_t),
         activepowerlimits_from=(min=d["pminf"] , max=d["pmaxf"]),
         activepowerlimits_to=(min=d["pmint"], max=d["pmaxt"]),
         reactivepowerlimits_from=(min=d["qminf"], max=d["qmaxf"]),
