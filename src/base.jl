@@ -153,8 +153,8 @@ function check!(sys::System)
 
     branches = get_components(Branch, sys)
     if length(branches) > 0
-        calculate_thermal_limits!(branches, sys.basepower)
         check_branches!(branches)
+        calculate_thermal_limits!(branches, sys.basepower)
     end
 
     generators = get_components(Generator, sys)
@@ -280,6 +280,69 @@ function add_component!(sys::System, component::T) where T <: Component
     return nothing
 end
 
+"""
+    remove_components!(::Type{T}, sys::System) where T <: Component
+
+Remove all components of type T from the system.
+
+Throws InvalidParameter if the type is not stored.
+"""
+function remove_components!(::Type{T}, sys::System) where T <: Component
+    if !haskey(sys.components, T)
+        throw(InvalidParameter("component $T is not stored"))
+    end
+
+    pop!(sys.components, T)
+    @debug "Removed all components of type" T
+end
+
+"""
+    remove_component!(sys::System, component::T) where T <: Component
+
+Remove a component from the system by its value.
+
+Throws InvalidParameter if the component is not stored.
+"""
+function remove_component!(sys::System, component::T) where T <: Component
+    _remove_component!(T, sys, get_name(component))
+end
+
+"""
+    remove_component!(
+                      ::Type{T},
+                      sys::System,
+                      name::AbstractString,
+                      ) where T <: Component
+
+Remove a component from the system by its name.
+
+Throws InvalidParameter if the component is not stored.
+"""
+function remove_component!(
+                           ::Type{T},
+                           sys::System,
+                           name::AbstractString,
+                          ) where T <: Component
+    _remove_component!(T, sys, name)
+end
+
+function _remove_component!(
+                            ::Type{T},
+                            sys::System,
+                            name::AbstractString,
+                           ) where T <: Component
+    if !haskey(sys.components, T)
+        throw(InvalidParameter("component $T is not stored"))
+    end
+
+    if !haskey(sys.components[T], name)
+        throw(InvalidParameter("component $T name=$name is not stored"))
+    end
+
+    pop!(sys.components[T], name)
+    @debug "Removed component" T name
+end
+
 function get_bus(sys::System, bus_number::Int)
     for bus in get_components(Bus, sys)
         if bus.number == bus_number
@@ -299,6 +362,25 @@ function get_buses(sys::System, bus_numbers::Set{Int})
     end
 
     return buses
+end
+
+""" Checks that the component exists in the systems and the UUID's match"""
+function _validate_forecast(sys::System, forecast::T) where T <: Forecast
+        # Validate that each forecast's component is stored in the system.
+        comp = forecast.component
+        ctype = typeof(comp)
+        component = get_component(ctype, sys, get_name(comp))
+        if isnothing(component)
+            throw(InvalidParameter("no $ctype with name=$(get_name(comp)) is stored"))
+        end
+
+        user_uuid = get_uuid(comp)
+        ps_uuid = get_uuid(component)
+        if user_uuid != ps_uuid
+            throw(InvalidParameter(
+                "forecast component UUID doesn't match, perhaps it was copied?; " *
+                "$ctype name=$(get_name(comp)) user=$user_uuid system=$ps_uuid"))
+        end
 end
 
 """
@@ -323,25 +405,28 @@ function add_forecasts!(sys::System, forecasts)
         return
     end
 
-    # Validate that each forecast's component is stored in the system.
     for forecast in forecasts
-        comp = forecast.component
-        ctype = typeof(comp)
-        component = get_component(ctype, sys, get_name(comp))
-        if isnothing(component)
-            throw(InvalidParameter("no $ctype with name=$(get_name(comp)) is stored"))
-        end
-
-        user_uuid = get_uuid(comp)
-        ps_uuid = get_uuid(component)
-        if user_uuid != ps_uuid
-            throw(InvalidParameter(
-                "forecast component UUID doesn't match, perhaps it was copied?; " *
-                "$ctype name=$(get_name(comp)) user=$user_uuid system=$ps_uuid"))
-        end
+        _validate_forecast(sys,forecast)
     end
 
     _add_forecasts!(sys.forecasts, forecasts)
+end
+
+"""
+    add_forecast!(sys::System, forecasts)
+
+Add forecasts to the system.
+
+# Arguments
+- `sys::System`: system
+- `forecast`: Any object of subtype forecast
+
+Throws InvalidParameter if the forecast's component is not stored in the system.
+
+"""
+function add_forecast!(sys::System, forecast::T) where T <: Forecast
+    _validate_forecast(sys, forecast)
+    _add_forecasts!(sys.forecasts, [forecast])
 end
 
 """Return the horizon for all forecasts."""
@@ -507,10 +592,6 @@ function remove_forecast!(sys::System, forecast::T) where T <: Forecast
         reset_info!(sys.forecasts)
     end
 end
-
-# TODO: implement methods to remove components. In order to do this we will
-# need each PowerSystemType to store a UUID.
-# GitHub issue #203
 
 """
     get_component(

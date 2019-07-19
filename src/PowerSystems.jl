@@ -30,6 +30,7 @@ export PhaseShiftingTransformer
 
 export Forecast
 export Deterministic
+export Probabilistic
 
 export ThreePartCost
 export TwoPartCost
@@ -76,6 +77,7 @@ export BusType
 export parse_standard_files
 export parse_file
 export add_forecasts!
+export add_forecast!
 export remove_forecast!
 export forecast_csv_parser!
 export get_forecast_initial_times
@@ -92,6 +94,8 @@ export add_component!
 export get_component
 export get_components
 export get_components_by_name
+export remove_components!
+export remove_component!
 export iterate_components
 export to_json
 export from_json
