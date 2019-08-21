@@ -57,7 +57,7 @@ function check_network_data(data::Dict{String,Any})
     check_connectivity(data)
 
     mod_branch[:xfer_fix] = check_transformer_parameters(data)
-    mod_branch[:vad_bounds] = check_voltage_angle_differences(data)
+    #mod_branch[:vad_bounds] = check_voltage_angle_differences(data)
     mod_branch[:mva_zero] = check_thermal_limits(data)
     mod_branch[:orientation] = check_branch_directions(data)
     check_branch_loops(data)
@@ -83,7 +83,6 @@ function check_network_data(data::Dict{String,Any})
     )
 end
 
-
 #=
 function row_to_typed_dict(row_data, columns)
     @info("call to depreciated function  row_to_typed_dict, use row_to_typed_dict")
@@ -95,6 +94,3 @@ function row_to_dict(row_data, columns)
     return row_to_dict(row_data, columns)
 end
 =#
-
-
-
