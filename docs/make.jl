@@ -1,10 +1,11 @@
 using Documenter, PowerSystems
+const PSYPATH = dirname(pathof(PowerSystems))
 
-include("src/generate_validation_table.jl")
+include(joinpath(@__DIR__, "src", "generate_validation_table.jl"))
 
 makedocs(
     modules = [PowerSystems],
-    format = :html,
+    format = Documenter.HTML(),
     sitename = "PowerSystems.jl",
     pages = Any[ # Compat: `Any` for 0.4 compat
         "Home" => "index.md",

@@ -1,8 +1,6 @@
-const PSYPATH = dirname(pathof(PowerSystems))
-
+@info "Generating Validation Table"
 function generate_validation_table(filepath::AbstractString)
-    descriptor = PowerSystems.read_validation_descriptor(joinpath(PSYPATH,
-                                                "descriptors/validation_config.json"))
+    descriptor = PowerSystems.read_validation_descriptor(joinpath(PSYPATH,"descriptors","power_system_structs.json"))
     open(filepath, "w") do io
         write(io, "# Data Requirements\n\n")
         write(io, "|  Struct Name  |  Field Name  |  DataType  |  Min  |  Max  |  Action  |\n")
