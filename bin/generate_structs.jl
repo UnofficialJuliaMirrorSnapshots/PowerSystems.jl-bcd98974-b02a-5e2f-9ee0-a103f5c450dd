@@ -12,13 +12,15 @@ This file is auto-generated. Do not edit.
 {{#docstring}}\"\"\"{{docstring}}\"\"\"{{/docstring}}
 mutable struct {{struct_name}}{{#parametric}}{T <: {{parametric}}}{{/parametric}} <: {{supertype}}
     {{#parameters}}
-    {{name}}::{{data_type}}{{#comment}}  # {{comment}}{{/comment}}
+    {{name}}::{{data_type}}{{#comment}}  # {{{comment}}}{{/comment}}
     {{/parameters}}
     {{#inner_constructor_check}}
 
     function {{struct_name}}({{#parameters}}{{name}}, {{/parameters}})
         ({{#parameters}}{{name}}, {{/parameters}}) = {{inner_constructor_check}}(
-            {{#parameters}} {{name}}, {{/parameters}}
+            {{#parameters}}
+            {{name}},
+            {{/parameters}}
         )
         new({{#parameters}}{{name}}, {{/parameters}})
     end
@@ -49,10 +51,10 @@ function {{struct_name}}(::Nothing)
 end
 {{/has_null_values}}
 
-{{#parameters}}
+{{#accessors}}
 \"\"\"Get {{struct_name}} {{name}}.\"\"\"
-get_{{name}}(value::{{struct_name}}) = value.{{name}}
-{{/parameters}}
+{{accessor}}(value::{{struct_name}}) = value.{{name}}
+{{/accessors}}
 """
 
 function read_json_data(filename::String)
@@ -63,13 +65,21 @@ end
 
 function generate_structs(directory, data::Vector)
     struct_names = Vector{String}()
+    unique_accessor_functions = Set{String}()
 
     for item in data
+        accessors = Vector{Dict}()
         item["has_null_values"] = true
         parameters = Vector{Dict}()
         for field in item["fields"]
             param = namedtuple_to_dict(field)
             push!(parameters, param)
+
+            accessor_name = "get_" * param["name"]
+            push!(accessors, Dict("name" => param["name"], "accessor" => accessor_name))
+            if accessor_name != "internal"
+                push!(unique_accessor_functions, accessor_name)
+            end
 
             if param["name"] == "internal"
                 param["internal"] = true
@@ -88,6 +98,7 @@ function generate_structs(directory, data::Vector)
         end
 
         item["parameters"] = parameters
+        item["accessors"] = accessors
 
         filename = joinpath(directory, item["struct_name"] * ".jl")
         open(filename, "w") do io
@@ -97,10 +108,17 @@ function generate_structs(directory, data::Vector)
         println("Wrote $filename")
     end
 
+    accessors = sort!(collect(unique_accessor_functions))
+
     filename = joinpath(directory, "includes.jl")
     open(filename, "w") do io
         for name in struct_names
             write(io, "include(\"$name.jl\")\n")
+        end
+        write(io, "\n")
+
+        for accessor in accessors
+            write(io, "export $accessor\n")
         end
         println("Wrote $filename")
     end
