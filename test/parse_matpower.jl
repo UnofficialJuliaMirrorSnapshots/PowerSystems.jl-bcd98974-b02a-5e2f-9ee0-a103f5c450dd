@@ -14,6 +14,8 @@ POWER_MODELS_KEYS = [
     "storage",
 ]
 
+badfiles = Dict("case30.m" => PSY.InvalidValue)
+
 @testset "Parse Matpower data files" begin
     files = [x for x in readdir(joinpath(MATPOWER_DIR)) if splitext(x)[2] == ".m"]
     if length(files) == 0
@@ -30,8 +32,16 @@ POWER_MODELS_KEYS = [
         end
         @info "Successfully parsed $path to PowerModels dict"
 
-        sys = PowerSystems.pm2ps_dict(pm_dict)
-        @info "Successfully parsed $path to System struct"
+        if f in keys(badfiles)
+            @test_logs((:error, r"cannot create Line"), match_mode=:any,
+                @test_throws(badfiles[f],
+			                 PowerSystems.pm2ps_dict(pm_dict)
+			    )
+			)
+        else
+            sys = PowerSystems.pm2ps_dict(pm_dict)
+            @info "Successfully parsed $path to System struct"
+        end
     end
 end
 
@@ -51,7 +61,15 @@ end
         end
         @info "Successfully parsed $path to PowerModels dict"
 
-        sys = PowerSystems.pm2ps_dict(pm_dict)
-        @info "Successfully parsed $path to System struct"
+        if f in keys(badfiles)
+            @test_logs((:error, r"cannot create Line"), match_mode=:any,
+                @test_throws(badfiles[f],
+			                 PowerSystems.pm2ps_dict(pm_dict)
+			    )
+			)
+        else
+            sys = PowerSystems.pm2ps_dict(pm_dict)
+            @info "Successfully parsed $path to System struct"
+        end
     end
 end
