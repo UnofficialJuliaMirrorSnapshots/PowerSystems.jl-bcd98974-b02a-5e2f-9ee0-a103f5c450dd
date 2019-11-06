@@ -4,12 +4,13 @@
 [![Build status](https://ci.appveyor.com/api/projects/status/96iqo76vjlrvnu90/branch/master?svg=true)](https://ci.appveyor.com/project/jd-lara/powersystems-jl/branch/master)
 [![codecov](https://codecov.io/gh/NREL/PowerSystems.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/NREL/PowerSystems.jl)
 [![Gitter](https://badges.gitter.im/NREL/PowerSystems.jl.svg)](https://gitter.im/NREL/PowerSystems.jl?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+[![](https://img.shields.io/badge/docs-latest-blue.svg)](https://nrel.github.io/PowerSystems.jl/latest)
 
 The `PowerSystems.jl` package provides a rigorous data model using Julia structures to enable power systems analysis and modeling. In addition to stand-alone system analysis tools and data model building, the `PowerSystems.jl` package is used as the foundational data container for the [PowerSimulations.jl](https://github.com/NREL/PowerSimulations.jl) package. `PowerSystems.jl` supports a limited number of data file formats for parsing.
 
 ## Version Advisory
 
-- The latest tagged version in PowerSystems (v0.4.0) will work with Julia v1.2+.
+- The latest tagged version in PowerSystems (v0.5.1) will work with Julia v1.2+.
 
 ### Device data enabled in PowerSystems:
  - Generators (Thermal, Renewable and Hydro)
@@ -24,7 +25,7 @@ The `PowerSystems.jl` package provides a rigorous data model using Julia structu
 ### Parsing capabilities in PowerSystems:
  - MATPOWER CaseFormat
  - PSS/E - PTI Format
- - [RTS-GMLC](https://github.com/GridMod/RTS-GMLC/tree/master/RTS_Data/SourceData) data format
+ - [RTS-GMLC](https://github.com/GridMod/RTS-GMLC/tree/master/RTS_Data/SourceData) table data format
 
 ## Installation
 
