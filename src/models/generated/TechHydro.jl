@@ -1,25 +1,49 @@
 #=
 This file is auto-generated. Do not edit.
 =#
+"""
+    mutable struct TechHydro <: TechnicalParams
+        rating::Float64
+        primemover::PrimeMovers
+        activepowerlimits::Min_Max
+        reactivepowerlimits::Union{Nothing, Min_Max}
+        ramplimits::Union{Nothing, NamedTuple{(:up, :down), Tuple{Float64, Float64}}}
+        timelimits::Union{Nothing, NamedTuple{(:up, :down), Tuple{Float64, Float64}}}
+        internal::InfrastructureSystemsInternal
+    end
 
+Data Structures for the technical parameters of hydropower generation technologies.
 
+# Arguments
+-`rating::Float64`: Thermal limited MVA Power Output of the unit. <= Capacity
+-`primemover::PrimeMovers`: PrimeMover Technology according to EIA 923
+-`activepowerlimits::Min_Max`
+-`reactivepowerlimits::Union{Nothing, Min_Max}`
+-`ramplimits::Union{Nothing, NamedTuple{(:up, :down), Tuple{Float64, Float64}}}`: ramp up and ramp down limits
+-`timelimits::Union{Nothing, NamedTuple{(:up, :down), Tuple{Float64, Float64}}}`: ramp up and ramp down time limits
+-`internal::InfrastructureSystemsInternal`: power system internal reference, do not modify
+"""
 mutable struct TechHydro <: TechnicalParams
-    rating::Float64  # Thermal limited MVA Power Output of the unit. <= Capacity
-    primemover::PrimeMovers  # PrimeMover Technology according to EIA 923
+    "Thermal limited MVA Power Output of the unit. <= Capacity"
+    rating::Float64
+    "PrimeMover Technology according to EIA 923"
+    primemover::PrimeMovers
     activepowerlimits::Min_Max
     reactivepowerlimits::Union{Nothing, Min_Max}
+    "ramp up and ramp down limits"
     ramplimits::Union{Nothing, NamedTuple{(:up, :down), Tuple{Float64, Float64}}}
+    "ramp up and ramp down time limits"
     timelimits::Union{Nothing, NamedTuple{(:up, :down), Tuple{Float64, Float64}}}
-    _forecasts::InfrastructureSystems.Forecasts
+    "power system internal reference, do not modify"
     internal::InfrastructureSystemsInternal
 end
 
-function TechHydro(rating, primemover, activepowerlimits, reactivepowerlimits, ramplimits, timelimits, _forecasts=InfrastructureSystems.Forecasts(), )
-    TechHydro(rating, primemover, activepowerlimits, reactivepowerlimits, ramplimits, timelimits, _forecasts, InfrastructureSystemsInternal())
+function TechHydro(rating, primemover, activepowerlimits, reactivepowerlimits, ramplimits, timelimits, )
+    TechHydro(rating, primemover, activepowerlimits, reactivepowerlimits, ramplimits, timelimits, InfrastructureSystemsInternal())
 end
 
-function TechHydro(; rating, primemover, activepowerlimits, reactivepowerlimits, ramplimits, timelimits, _forecasts=InfrastructureSystems.Forecasts(), )
-    TechHydro(rating, primemover, activepowerlimits, reactivepowerlimits, ramplimits, timelimits, _forecasts, )
+function TechHydro(; rating, primemover, activepowerlimits, reactivepowerlimits, ramplimits, timelimits, )
+    TechHydro(rating, primemover, activepowerlimits, reactivepowerlimits, ramplimits, timelimits, )
 end
 
 # Constructor for demo purposes; non-functional.
@@ -32,7 +56,6 @@ function TechHydro(::Nothing)
         reactivepowerlimits=nothing,
         ramplimits=nothing,
         timelimits=nothing,
-        _forecasts=InfrastructureSystems.Forecasts(),
     )
 end
 
@@ -48,7 +71,5 @@ get_reactivepowerlimits(value::TechHydro) = value.reactivepowerlimits
 get_ramplimits(value::TechHydro) = value.ramplimits
 """Get TechHydro timelimits."""
 get_timelimits(value::TechHydro) = value.timelimits
-"""Get TechHydro _forecasts."""
-get__forecasts(value::TechHydro) = value._forecasts
 """Get TechHydro internal."""
 get_internal(value::TechHydro) = value.internal

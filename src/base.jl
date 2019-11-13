@@ -2,36 +2,36 @@
 const SKIP_PM_VALIDATION = false
 
 """
-    System
+System
 
-    A power system defined by fields for basepower, components, and forecasts.
+A power system defined by fields for basepower, components, and forecasts.
 
-    # Constructor
-    ```julia
-    System(basepower)
-    System(components, basepower)
-    System(buses, generators, loads, branches, storage, basepower, services, annex; kwargs...)
-    System(buses, generators, loads, basepower; kwargs...)
-    System(file; kwargs...)
-    System(; buses, generators, loads, branches, storage, basepower, services, annex, kwargs...)
-    System(; kwargs...)
-    ```
+```julia
+System(basepower)
+System(components, basepower)
+System(buses, generators, loads, branches, storage, basepower, services, annex; kwargs...)
+System(buses, generators, loads, basepower; kwargs...)
+System(file; kwargs...)
+System(; buses, generators, loads, branches, storage, basepower, services, annex, kwargs...)
+System(; kwargs...)
+```
 
-    # Arguments
+# Arguments
+- `buses::Vector{Bus}`: an array of buses
+- `generators::Vector{Generator}`: an array of generators of (possibly) different types
+- `loads::Vector{ElectricLoad}`: an array of load specifications that includes timing of the loads
+- `branches::Union{Nothing, Vector{Branch}}`: an array of branches; may be `nothing`
+- `storage::Union{Nothing, Vector{Storage}}`: an array of storage devices; may be `nothing`
+- `basepower::Float64`: the base power value for the system
+- `services::Union{Nothing, Vector{ <: Service}}`: an array of services; may be `nothing`
 
-    * `buses`::Vector{Bus} : an array of buses
-    * `generators`::Vector{Generator} : an array of generators of (possibly) different types
-    * `loads`::Vector{ElectricLoad} : an array of load specifications that includes timing of the loads
-    * `branches`::Union{Nothing, Vector{Branch}} : an array of branches; may be `nothing`
-    * `storage`::Union{Nothing, Vector{Storage}} : an array of storage devices; may be `nothing`
-    * `basepower`::Float64 : the base power value for the system
-    * `services`::Union{Nothing, Vector{ <: Service}} : an array of services; may be `nothing`
+# Keyword arguments
+- `runchecks::Bool`: Run available checks on input fields and when add_component! is called.
+  Throws InvalidRange if an error is found.
+- `time_series_in_memory::Bool=false`: Store time series data in memory instead of HDF5.
+- `configpath::String`: specify path to validation config file
 
-    # Keyword arguments
 
-    * `runchecks`::Bool : run available checks on input fields. If an error is found in a field, that component will not be added to the system and InvalidRange is thrown.
-    * `configpath`::String : specify path to validation config file
-    DOCTODO: any other keyword arguments? genmap_file, REGEX_FILE
 """
 struct System <: PowerSystemType
     data::IS.SystemData
@@ -229,7 +229,6 @@ end
     add_forecasts!(
                    sys::System,
                    metadata_file::AbstractString,
-                   label_mapping::Dict{Tuple{String, String}, String};
                    resolution=nothing,
                   )
 
@@ -239,18 +238,14 @@ Adds forecasts from a metadata file or metadata descriptors.
 - `sys::System`: system
 - `metadata_file::AbstractString`: metadata file for timeseries
   that includes an array of IS.TimeseriesFileMetadata instances or a vector.
-- `label_mapping::Dict{Tuple{String, String}, String}`: maps customized component field names to
-  PowerSystem field names
 - `resolution::DateTime.Period=nothing`: skip forecast that don't match this resolution.
 """
 function add_forecasts!(
                         sys::System,
-                        metadata_file::AbstractString,
-                        label_mapping::Dict{Tuple{String, String}, String};
+                        metadata_file::AbstractString;
                         resolution=nothing,
                        )
-    return IS.add_forecasts!(Component, sys.data, metadata_file, label_mapping;
-                             resolution=resolution)
+    return IS.add_forecasts!(Component, sys.data, metadata_file; resolution=resolution)
 end
 
 """
@@ -269,7 +264,7 @@ Adds forecasts from a metadata file or metadata descriptors.
 """
 function add_forecasts!(
                         sys::System,
-                        timeseries_metadata::Vector{IS.TimeseriesFileMetadata},
+                        timeseries_metadata::Vector{IS.TimeseriesFileMetadata};
                         resolution=nothing
                        )
     return IS.add_forecasts!(Component, sys.data, timeseries_metadata;
@@ -566,18 +561,72 @@ function make_forecasts(sys::System, metadata::Vector{IS.TimeseriesFileMetadata}
 end
 
 """
-    generate_initial_times(sys::System, interval::Dates.Period, horizon::Int)
+    are_forecasts_contiguous(sys::System)
+
+Return true if forecasts are stored contiguously.
+
+Throws ArgumentError if there are no forecasts stored.
+"""
+function are_forecasts_contiguous(sys::System)
+    return IS.are_forecasts_contiguous(sys.data)
+end
+
+"""
+    are_forecasts_contiguous(component::Component)
+"""
+function are_forecasts_contiguous(component::Component)
+    return IS.are_forecasts_contiguous(component)
+end
+
+"""
+    generate_initial_times(
+                           sys::System,
+                           interval::Dates.Period,
+                           horizon::Int;
+                           initial_time::Union{Nothing, Dates.DateTime}=nothing,
+                          )
 
 Generates all possible initial times for the stored forecasts. This should return the same
 result regardless of whether the forecasts have been stored as one contiguous array or
 chunks of contiguous arrays, such as one 365-day forecast vs 365 one-day forecasts.
 
-
 Throws ArgumentError if there are no forecasts stored, interval is not a multiple of the
 system's forecast resolution, or if the stored forecasts have overlapping timestamps.
+
+# Arguments
+- `sys::System`: System.
+- `interval::Dates.Period`: Amount of time in between each initial time.
+- `horizon::Int`: Length of each forecast array.
+- `initial_time::Union{Nothing, Dates.DateTime}=nothing`: Start with this time. If nothing,
+  use the first initial time.
 """
-function generate_initial_times(sys::System, interval::Dates.Period, horizon::Int)
-    return IS.generate_initial_times(sys.data, interval, horizon)
+function generate_initial_times(
+                                sys::System,
+                                interval::Dates.Period,
+                                horizon::Int;
+                                initial_time::Union{Nothing, Dates.DateTime}=nothing)
+    return IS.generate_initial_times(sys.data, interval, horizon;
+                                     initial_time = initial_time)
+end
+
+"""
+    generate_initial_times(
+                           component::InfrastructureSystemsType,
+                           interval::Dates.Period,
+                           horizon::Int;
+                           initial_time::Union{Nothing, Dates.DateTime}=nothing,
+                          )
+
+Generate initial times for a component.
+"""
+function generate_initial_times(
+                                component::InfrastructureSystemsType,
+                                interval::Dates.Period,
+                                horizon::Int;
+                                initial_time::Union{Nothing, Dates.DateTime}=nothing,
+                               )
+    return IS.generate_initial_times(component, interval, horizon;
+                                     initial_time=initial_time)
 end
 
 """
@@ -650,7 +699,7 @@ Return a TimeSeries.TimeArray where the forecast data has been multiplied by the
 component field.
 """
 function get_forecast_values(component::Component, forecast::Forecast)
-    return IS.get_forecast_values(component, forecast)
+    return IS.get_forecast_values(PowerSystems, component, forecast)
 end
 
 """
@@ -1045,12 +1094,14 @@ end
 function _create_system_data_from_kwargs(; kwargs...)
     validation_descriptor_file = nothing
     runchecks = get(kwargs, :runchecks, true)
+    time_series_in_memory = get(kwargs, :time_series_in_memory, false)
     if runchecks
         validation_descriptor_file = get(kwargs, :configpath,
                                          POWER_SYSTEM_STRUCT_DESCRIPTOR_FILE)
     end
 
-    return IS.SystemData(; validation_descriptor_file=validation_descriptor_file)
+    return IS.SystemData(; validation_descriptor_file=validation_descriptor_file,
+                         time_series_in_memory=time_series_in_memory)
 end
 
 function parse_types(mod)
